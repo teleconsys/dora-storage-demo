@@ -10,3 +10,6 @@ edition = "2021"
 kyber-rs = { path = "../kyber-rs" }
 anyhow = "1.0.68"
 thiserror = "1.0.38"
+futures = "0.3.25"
+async-std = "1.12.0"
+async-trait = "0.1.60"

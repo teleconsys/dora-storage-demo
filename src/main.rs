@@ -1,6 +1,12 @@
-use std::collections::HashMap;
+mod dkg;
+mod fsm;
+
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Error, Ok, Result};
+use dkg::{DkgMessage, Initializing};
+use fsm::{IoBus, StateMachine};
+use futures::{executor::block_on, lock::Mutex};
 use kyber_rs::{
     group::edwards25519::{Point as EdPoint, SuiteEd25519},
     share::dkg::rabin::{new_dist_key_generator, Deal, DistKeyGenerator, Justification, Response},
@@ -145,57 +151,25 @@ fn test_main() -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let _suite = Suite::new_blake_sha256ed25519();
-    let mut nodes = (0..5)
-        .map(|i| Node::new(i))
-        .collect::<Result<Vec<Node>>>()?;
+    let suite = &SuiteEd25519::new_blake_sha256ed25519();
+    let messages = Arc::new(Mutex::new(Vec::new()));
+    let mut nodes: Vec<StateMachine<DkgMessage>> = (0..5)
+        .into_iter()
+        .map(|i| {
+            StateMachine::new(
+                Box::new(Initializing::new(new_key_pair(suite), 5)),
+                Box::new(IoBus::new(messages.clone())),
+                Box::new(IoBus::new(messages.clone())),
+                i,
+            )
+        })
+        .collect();
 
-    let public_keys: Vec<EdPoint> = nodes.iter().map(|n| n.key.public.to_owned()).collect();
+    let futures = nodes.iter_mut().map(|n| n.run());
+    let results = block_on(futures::future::join_all(futures));
 
-    for node in &mut nodes {
-        node.init_dkg(&public_keys)?;
-    }
-
-    println!("Processing Deals");
-    for_each_node_pair(&mut nodes, |node, other_node| {
-        let deal = &other_node.get_deal(node.index)?;
-        println!("\tdeal from {} for {}", deal.index, node.index);
-        node.process_deal(deal)
-    })?;
-
-    println!("\nProcessing Responses");
-    for_each_node_pair(&mut nodes, |node, other_node| {
-        for response in other_node.get_responses()? {
-            println!(
-                "Processing response with index {} from node {} for node {}",
-                response.index, other_node.index, node.index
-            );
-            node.process_response(response)?;
-        }
-        Ok(())
-    })?;
-
-    println!("\nProcessing Justifications");
-    for_each_node_pair(&mut nodes, |node, other_node| {
-        for justification in other_node.get_justifications(node.index)? {
-            match justification {
-                Some(justification) => {
-                    println!(
-                        "Processing justification {} for node {}",
-                        justification.index, node.index
-                    );
-                    node.process_justification(justification)?;
-                }
-                None => (),
-            }
-        }
-        Ok(())
-    })?;
-
-    println!("\nChecking if nodes are ready");
-    for node in nodes {
-        node.is_ready()?;
-        println!("Node {} is ready", node.index);
+    for r in results {
+        r?;
     }
 
     Ok(())
