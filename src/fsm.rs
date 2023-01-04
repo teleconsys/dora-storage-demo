@@ -4,6 +4,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use colored::Colorize;
 use futures::lock::Mutex;
+use kyber_rs::group::edwards25519::Point;
 use thiserror::Error;
 
 use crate::feed::Feed;
@@ -75,12 +76,7 @@ impl<M: Display, R: Receiver<M>> StateMachine<M, R> {
                     Transition::Same => {
                         match self.message_input.next().await {
                             Ok(next_message) => match self.state.deliver(next_message) {
-                                DeliveryStatus::Delivered => {
-                                    // log::trace!(
-                                    //     target: &self.log_target(),
-                                    //     "Processed new message"
-                                    // );
-                                }
+                                DeliveryStatus::Delivered => {}
                                 DeliveryStatus::Unexpected(m) => {
                                     log::warn!(
                                         target: &self.log_target(),
@@ -95,7 +91,6 @@ impl<M: Display, R: Receiver<M>> StateMachine<M, R> {
                                     )));
                                 }
                             },
-                            // Err(e) => println!("[{}] {}", self.id, e),
                             Err(e) => {
                                 log::trace!(
                                     target: &self.log_target(),
@@ -143,16 +138,23 @@ pub enum ReceiverError {
     FailedToReceive { error: Error },
 }
 
+pub struct MessageWrapper<M> {
+    pub sender: Point,
+    pub message: M,
+}
+
 pub struct IoBus<M> {
-    messages: Arc<Mutex<Vec<M>>>,
+    messages: Arc<Mutex<Vec<MessageWrapper<M>>>>,
     read_index: usize,
+    own_key: Point,
 }
 
 impl<M> IoBus<M> {
-    pub fn new(messages: Arc<Mutex<Vec<M>>>) -> IoBus<M> {
+    pub fn new(messages: Arc<Mutex<Vec<MessageWrapper<M>>>>, key: Point) -> IoBus<M> {
         Self {
             messages,
             read_index: 0,
+            own_key: key,
         }
     }
 }
@@ -160,7 +162,10 @@ impl<M> IoBus<M> {
 #[async_trait]
 impl<M: Send> Sender<M> for IoBus<M> {
     async fn send(&mut self, msg: M) {
-        self.messages.lock().await.push(msg);
+        self.messages.lock().await.push(MessageWrapper {
+            sender: self.own_key.clone(),
+            message: msg,
+        });
     }
 }
 
@@ -174,7 +179,11 @@ where
         let m = self.messages.lock().await;
         if let Some(msg) = m.get(self.read_index) {
             self.read_index += 1;
-            return Ok(msg.to_owned());
+            if msg.sender == self.own_key {
+                log::trace!("Skipping own message");
+                return Err(ReceiverError::NoNewMessages);
+            }
+            return Ok(msg.message.to_owned());
         }
         drop(m);
         async_std::task::sleep(Duration::from_millis(1)).await;

@@ -25,10 +25,12 @@ impl Display for Initializing {
 
 impl Initializing {
     pub fn new(key: Pair<Point>, num_participants: usize) -> Initializing {
+        let mut public_keys = Vec::with_capacity(num_participants);
+        public_keys.push(key.public.clone());
         Self {
             key,
             num_participants,
-            public_keys: Vec::with_capacity(num_participants),
+            public_keys,
         }
     }
 }
@@ -51,10 +53,12 @@ impl State<DkgMessage> for Initializing {
     fn advance(&self) -> Result<Transition<DkgMessage>, Error> {
         match self.public_keys.len() {
             n if n == self.num_participants => {
+                let mut public_keys = self.public_keys.clone();
+                public_keys.sort_by_key(|pk| pk.string());
                 let dkg = new_dist_key_generator(
                     &SuiteEd25519::new_blake_sha256ed25519(),
                     &self.key.private,
-                    &self.public_keys,
+                    &public_keys,
                     self.num_participants / 2 + 1,
                 )?;
                 Ok(Transition::Next(Box::new(ProcessingDeals::new(dkg)?)))

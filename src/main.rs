@@ -31,9 +31,9 @@ fn main() -> Result<()> {
         .enumerate()
         .map(|(i, keypair)| {
             StateMachine::new(
-                Box::new(Initializing::new(keypair, NUM_NODES)),
-                Feed::new(IoBus::new(messages.clone())),
-                Box::new(IoBus::new(messages.clone())),
+                Box::new(Initializing::new(keypair.clone(), NUM_NODES)),
+                Feed::new(IoBus::new(messages.clone(), keypair.public.clone())),
+                Box::new(IoBus::new(messages.clone(), keypair.public)),
                 i,
             )
         })
