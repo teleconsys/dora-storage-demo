@@ -37,7 +37,7 @@ impl<T, R: Receiver<T>> Feed<T, R> {
         }
 
         self.feed.receive().await.map_err(|e| match e {
-            ReceiverError::FailedToReceive { error } => FeedError::ChannelClosed,
+            ReceiverError::FailedToReceive { error: _ } => FeedError::ChannelClosed,
             ReceiverError::NoNewMessages => FeedError::NoNewMessages,
         })
     }

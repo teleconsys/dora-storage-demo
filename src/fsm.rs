@@ -179,7 +179,5 @@ where
         drop(m);
         async_std::task::sleep(Duration::from_millis(1)).await;
         Err(ReceiverError::NoNewMessages)
-        // println!("no messages...");
-        // Ok(self.receive().await?)
     }
 }
