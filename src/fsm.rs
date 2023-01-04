@@ -96,7 +96,9 @@ impl<M: Display, R: Receiver<M>> StateMachine<M, R> {
                                 }
                             },
                             // Err(e) => println!("[{}] {}", self.id, e),
-                            Err(_) => {}
+                            Err(e) => {
+                                log::trace!("Could not get new message due to: {}", e)
+                            }
                         };
                     }
                     Transition::Next(next_state) => {
@@ -107,7 +109,13 @@ impl<M: Display, R: Receiver<M>> StateMachine<M, R> {
                         self.state = next_state;
                         break;
                     }
-                    Transition::Terminal => break 'states,
+                    Transition::Terminal => {
+                        log::info!(
+                            target: &self.log_target(),
+                            "Completed"
+                        );
+                        break 'states;
+                    }
                 }
             }
         }
