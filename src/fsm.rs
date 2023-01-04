@@ -97,7 +97,9 @@ impl<M: Display, R: Receiver<M>> StateMachine<M, R> {
                             },
                             // Err(e) => println!("[{}] {}", self.id, e),
                             Err(e) => {
-                                log::trace!("Could not get new message due to: {}", e)
+                                log::trace!(
+                                    target: &self.log_target(),
+                                    "Could not get new message due to: {}", e)
                             }
                         };
                     }

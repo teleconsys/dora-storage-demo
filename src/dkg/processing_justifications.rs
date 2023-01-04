@@ -37,7 +37,7 @@ impl State<DkgMessage> for ProcessingJustifications {
             .collect()
     }
 
-    fn deliver(&mut self, message: DkgMessage) -> DeliveryStatus<DkgMessage> {
+    fn deliver(&mut self, _message: DkgMessage) -> DeliveryStatus<DkgMessage> {
         todo!()
     }
 

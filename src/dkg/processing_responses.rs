@@ -75,10 +75,9 @@ impl State<DkgMessage> for ProcessingResponses {
             return Ok(Transition::Next(Box::new(ProcessingJustifications::new(
                 self.dkg.to_owned(),
                 self.optional_justifications
-                    .to_owned()
-                    .into_iter()
-                    .filter(|o| o.is_some())
-                    .map(|some| some.unwrap())
+                    .iter()
+                    .flatten()
+                    .cloned()
                     .collect(),
             ))));
         }

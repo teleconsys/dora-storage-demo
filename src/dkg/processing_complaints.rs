@@ -44,9 +44,9 @@ impl Display for ProcessingComplaints {
 impl State<DkgMessage> for ProcessingComplaints {
     fn initialize(&self) -> Vec<DkgMessage> {
         self.complaints
-            .to_owned()
-            .into_iter()
-            .map(|c| DkgMessage::ComplaintCommits(c))
+            .iter()
+            .cloned()
+            .map(DkgMessage::ComplaintCommits)
             .collect()
     }
 

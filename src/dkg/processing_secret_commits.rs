@@ -29,7 +29,7 @@ impl ProcessingSecretCommits {
 
 impl Display for ProcessingSecretCommits {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("Processing secret commits",))
+        f.write_str("Processing secret commits")
     }
 }
 
@@ -68,11 +68,7 @@ impl State<DkgMessage> for ProcessingSecretCommits {
         if self.optional_complaints.len() == num_other_nodes {
             let transition = Transition::Next(Box::new(ProcessingComplaints::new(
                 self.dkg.to_owned(),
-                self.optional_complaints
-                    .to_owned()
-                    .into_iter()
-                    .flatten()
-                    .collect(),
+                self.optional_complaints.iter().flatten().cloned().collect(),
             )?));
             return Ok(transition);
         }

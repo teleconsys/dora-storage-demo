@@ -35,9 +35,9 @@ impl Display for ProcessingReconstructCommits {
 impl State<DkgMessage> for ProcessingReconstructCommits {
     fn initialize(&self) -> Vec<DkgMessage> {
         self.reconstruct_commits
-            .to_owned()
-            .into_iter()
-            .map(|c| DkgMessage::ReconstructCommits(c))
+            .iter()
+            .cloned()
+            .map(DkgMessage::ReconstructCommits)
             .collect()
     }
 
