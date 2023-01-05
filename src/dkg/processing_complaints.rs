@@ -12,6 +12,7 @@ use crate::fsm::Transition;
 
 use super::processing_reconstruct_commits::ProcessingReconstructCommits;
 use super::DkgMessage;
+use super::DkgTypes;
 
 pub struct ProcessingComplaints {
     dkg: DistKeyGenerator<SuiteEd25519>,
@@ -41,7 +42,7 @@ impl Display for ProcessingComplaints {
     }
 }
 
-impl State<DkgMessage> for ProcessingComplaints {
+impl State<DkgTypes> for ProcessingComplaints {
     fn initialize(&self) -> Vec<DkgMessage> {
         self.complaints
             .iter()
@@ -63,7 +64,7 @@ impl State<DkgMessage> for ProcessingComplaints {
         }
     }
 
-    fn advance(&self) -> Result<crate::fsm::Transition<DkgMessage>, anyhow::Error> {
+    fn advance(&self) -> Result<crate::fsm::Transition<DkgTypes>, anyhow::Error> {
         Ok(Transition::Next(Box::new(
             ProcessingReconstructCommits::new(self.dkg.to_owned()),
         )))

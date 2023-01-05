@@ -7,7 +7,7 @@ use kyber_rs::{
 
 use crate::fsm::{State, Transition};
 
-use super::DkgMessage;
+use super::{DkgMessage, DkgTerminalStates, DkgTypes};
 
 pub struct ProcessingReconstructCommits {
     dkg: DistKeyGenerator<SuiteEd25519>,
@@ -32,7 +32,7 @@ impl Display for ProcessingReconstructCommits {
     }
 }
 
-impl State<DkgMessage> for ProcessingReconstructCommits {
+impl State<DkgTypes> for ProcessingReconstructCommits {
     fn initialize(&self) -> Vec<DkgMessage> {
         self.reconstruct_commits
             .iter()
@@ -51,9 +51,11 @@ impl State<DkgMessage> for ProcessingReconstructCommits {
         }
     }
 
-    fn advance(&self) -> Result<crate::fsm::Transition<DkgMessage>, anyhow::Error> {
+    fn advance(&self) -> Result<crate::fsm::Transition<DkgTypes>, anyhow::Error> {
         match self.dkg.dist_key_share() {
-            Ok(_) => Ok(Transition::Terminal),
+            Ok(_) => Ok(Transition::Terminal(DkgTerminalStates::Completed {
+                dkg: self.dkg.clone(),
+            })),
             Err(_) => Ok(Transition::Same),
         }
     }

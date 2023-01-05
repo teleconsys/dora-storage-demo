@@ -9,7 +9,7 @@ use thiserror::Error;
 
 use crate::feed::Feed;
 
-pub type BoxedState<M> = Box<dyn State<M>>;
+pub type BoxedState<T> = Box<dyn State<T>>;
 
 pub enum DeliveryStatus<M> {
     Delivered,
@@ -17,35 +17,41 @@ pub enum DeliveryStatus<M> {
     Error(Error),
 }
 
-pub enum Transition<M> {
+pub enum Transition<T: StateMachineTypes> {
     Same,
-    Next(BoxedState<M>),
-    Terminal,
+    Next(BoxedState<T>),
+    Terminal(T::TerminalStates),
 }
 
-pub trait State<M>: Display + Send {
-    fn initialize(&self) -> Vec<M>;
-    fn deliver(&mut self, message: M) -> DeliveryStatus<M>;
-    fn advance(&self) -> Result<Transition<M>, Error>;
+pub trait State<T: StateMachineTypes>: Display + Send {
+    fn initialize(&self) -> Vec<T::Message>;
+    fn deliver(&mut self, message: T::Message) -> DeliveryStatus<T::Message>;
+    fn advance(&self) -> Result<Transition<T>, Error>;
 }
 
-pub struct StateMachine<M, R: Receiver<M>> {
+pub trait StateMachineTypes {
+    type Message: Display;
+    type Receiver: Receiver<Self::Message>;
+    type TerminalStates;
+}
+
+pub struct StateMachine<T: StateMachineTypes> {
     id: usize,
-    state: BoxedState<M>,
-    message_output: Box<dyn Sender<M>>,
-    message_input: Feed<M, R>,
+    state: BoxedState<T>,
+    message_output: Box<dyn Sender<T::Message>>,
+    message_input: Feed<T::Message, T::Receiver>,
 }
 
-impl<M: Display, R: Receiver<M>> StateMachine<M, R> {
+impl<T: StateMachineTypes> StateMachine<T> {
     fn log_target(&self) -> String {
         format!("fsm:node_{}", self.id)
     }
     pub fn new(
-        initial_state: BoxedState<M>,
-        input_channel: Feed<M, R>,
-        output_channel: Box<dyn Sender<M>>,
+        initial_state: BoxedState<T>,
+        input_channel: Feed<T::Message, T::Receiver>,
+        output_channel: Box<dyn Sender<T::Message>>,
         id: usize,
-    ) -> StateMachine<M, R> {
+    ) -> StateMachine<T> {
         Self {
             id,
             state: initial_state,
@@ -54,9 +60,9 @@ impl<M: Display, R: Receiver<M>> StateMachine<M, R> {
         }
     }
 
-    pub async fn run(&mut self) -> Result<(), Error> {
+    pub async fn run(&mut self) -> Result<T::TerminalStates, Error> {
         'states: loop {
-            let messages = self.state.initialize();
+            let messages: Vec<T::Message> = self.state.initialize();
             for message in messages {
                 self.message_output.send(message).await;
             }
@@ -68,7 +74,7 @@ impl<M: Display, R: Receiver<M>> StateMachine<M, R> {
                 self.state.to_string().cyan()
             );
             loop {
-                let transition = self
+                let transition: Transition<T> = self
                     .state
                     .advance()
                     .map_err(|e| Error::msg(format!("[{}] Failed transition: {}", self.id, e)))?;
@@ -92,9 +98,9 @@ impl<M: Display, R: Receiver<M>> StateMachine<M, R> {
                                 }
                             },
                             Err(e) => {
-                                log::trace!(
-                                    target: &self.log_target(),
-                                    "Could not get new message due to: {}", e)
+                                // log::trace!(
+                                //     target: &self.log_target(),
+                                //     "Could not get new message due to: {}", e)
                             }
                         };
                     }
@@ -106,17 +112,16 @@ impl<M: Display, R: Receiver<M>> StateMachine<M, R> {
                         self.state = next_state;
                         break;
                     }
-                    Transition::Terminal => {
+                    Transition::Terminal(final_state) => {
                         log::info!(
                             target: &self.log_target(),
                             "Completed"
                         );
-                        break 'states;
+                        return Ok(final_state);
                     }
                 }
             }
         }
-        Ok(())
     }
 }
 

@@ -8,7 +8,7 @@ use kyber_rs::{
 
 use crate::fsm::{DeliveryStatus, State, Transition};
 
-use super::{processing_justifications::ProcessingJustifications, DkgMessage};
+use super::{processing_justifications::ProcessingJustifications, DkgMessage, DkgTypes};
 
 pub struct ProcessingResponses {
     dkg: DistKeyGenerator<SuiteEd25519>,
@@ -38,7 +38,7 @@ impl Display for ProcessingResponses {
     }
 }
 
-impl State<DkgMessage> for ProcessingResponses {
+impl State<DkgTypes> for ProcessingResponses {
     fn initialize(&self) -> Vec<DkgMessage> {
         self.responses_for_other_nodes
             .iter()
@@ -69,7 +69,7 @@ impl State<DkgMessage> for ProcessingResponses {
         }
     }
 
-    fn advance(&self) -> Result<Transition<DkgMessage>, Error> {
+    fn advance(&self) -> Result<Transition<DkgTypes>, Error> {
         let number_of_other_nodes = self.dkg.participants.len() - 1;
         if self.optional_justifications.len() == number_of_other_nodes * number_of_other_nodes {
             return Ok(Transition::Next(Box::new(ProcessingJustifications::new(

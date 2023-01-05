@@ -9,7 +9,7 @@ use kyber_rs::{
 
 use crate::fsm::{DeliveryStatus, State, Transition};
 
-use super::{processing_deals::ProcessingDeals, DkgMessage};
+use super::{processing_deals::ProcessingDeals, DkgMessage, DkgTypes};
 
 pub struct Initializing {
     key: Pair<Point>,
@@ -35,7 +35,7 @@ impl Initializing {
     }
 }
 
-impl State<DkgMessage> for Initializing {
+impl State<DkgTypes> for Initializing {
     fn initialize(&self) -> Vec<DkgMessage> {
         vec![DkgMessage::PublicKey(self.key.public.clone())]
     }
@@ -50,7 +50,7 @@ impl State<DkgMessage> for Initializing {
         }
     }
 
-    fn advance(&self) -> Result<Transition<DkgMessage>, Error> {
+    fn advance(&self) -> Result<Transition<DkgTypes>, Error> {
         match self.public_keys.len() {
             n if n == self.num_participants => {
                 let mut public_keys = self.public_keys.clone();

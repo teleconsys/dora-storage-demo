@@ -7,7 +7,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use crate::fsm::{DeliveryStatus, State, Transition};
 
-use super::{processing_responses::ProcessingResponses, DkgMessage};
+use super::{processing_responses::ProcessingResponses, DkgMessage, DkgTypes};
 
 pub struct ProcessingDeals {
     deals: HashMap<usize, Deal<Point>>,
@@ -32,7 +32,7 @@ impl Display for ProcessingDeals {
     }
 }
 
-impl State<DkgMessage> for ProcessingDeals {
+impl State<DkgTypes> for ProcessingDeals {
     fn initialize(&self) -> Vec<DkgMessage> {
         self.deals
             .iter()
@@ -62,7 +62,7 @@ impl State<DkgMessage> for ProcessingDeals {
         }
     }
 
-    fn advance(&self) -> Result<Transition<DkgMessage>, Error> {
+    fn advance(&self) -> Result<Transition<DkgTypes>, Error> {
         match self.responses.len() {
             n if n == self.dkg.participants.len() - 1 => Ok(Transition::Next(Box::new(
                 ProcessingResponses::new(self.dkg.to_owned(), self.responses.to_owned()),

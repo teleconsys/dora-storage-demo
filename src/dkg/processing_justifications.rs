@@ -11,6 +11,7 @@ use crate::fsm::Transition;
 
 use super::processing_secret_commits::ProcessingSecretCommits;
 use super::DkgMessage;
+use super::DkgTypes;
 
 pub struct ProcessingJustifications {
     dkg: DistKeyGenerator<SuiteEd25519>,
@@ -29,7 +30,7 @@ impl ProcessingJustifications {
     }
 }
 
-impl State<DkgMessage> for ProcessingJustifications {
+impl State<DkgTypes> for ProcessingJustifications {
     fn initialize(&self) -> Vec<DkgMessage> {
         self.own_justifications
             .iter()
@@ -41,7 +42,7 @@ impl State<DkgMessage> for ProcessingJustifications {
         todo!()
     }
 
-    fn advance(&self) -> Result<Transition<DkgMessage>, anyhow::Error> {
+    fn advance(&self) -> Result<Transition<DkgTypes>, anyhow::Error> {
         if !self.dkg.certified() {
             bail!("Deal not certified")
         }
