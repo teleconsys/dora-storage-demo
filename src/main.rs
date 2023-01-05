@@ -11,15 +11,15 @@ use std::{iter::repeat_with, sync::Arc};
 use anyhow::{Ok, Result};
 use dkg::{DkgTerminalStates, DkgTypes, Initializing};
 use feed::Feed;
-use fsm::{IoBus, State, StateMachine, StateMachineTypes};
+use fsm::{IoBus, StateMachine};
 use futures::{executor::block_on, lock::Mutex};
-use itertools::Itertools;
+
 use kyber_rs::{
     group::edwards25519::{Point, SuiteEd25519},
     share::dkg::rabin::DistKeyGenerator,
     util::key::{new_key_pair, Pair},
 };
-use sign::{InitializingBuilder, SignTypes, Signature};
+use sign::{SignTypes, Signature};
 
 #[test]
 fn test_main() -> Result<()> {

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use enum_display::EnumDisplay;
+
 use std::fmt::Display;
 use thiserror::Error;
 
@@ -10,7 +10,6 @@ use kyber_rs::{
 };
 
 use crate::{
-    dkg::DkgTerminalStates,
     fsm::{DeliveryStatus, State, Transition},
 };
 

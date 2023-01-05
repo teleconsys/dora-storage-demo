@@ -97,7 +97,7 @@ impl<T: StateMachineTypes> StateMachine<T> {
                                     )));
                                 }
                             },
-                            Err(e) => {
+                            Err(_e) => {
                                 // log::trace!(
                                 //     target: &self.log_target(),
                                 //     "Could not get new message due to: {}", e)
