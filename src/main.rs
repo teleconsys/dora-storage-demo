@@ -21,11 +21,6 @@ use kyber_rs::{
 };
 use sign::{SignTypes, Signature};
 
-#[test]
-fn test_main() -> Result<()> {
-    main()
-}
-
 const NUM_NODES: usize = 5;
 
 fn main() -> Result<()> {

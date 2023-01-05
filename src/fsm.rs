@@ -61,7 +61,7 @@ impl<T: StateMachineTypes> StateMachine<T> {
     }
 
     pub async fn run(&mut self) -> Result<T::TerminalStates, Error> {
-        'states: loop {
+        loop {
             let messages: Vec<T::Message> = self.state.initialize();
             for message in messages {
                 self.message_output.send(message).await;
