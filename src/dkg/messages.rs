@@ -5,12 +5,14 @@ use kyber_rs::{
         ComplaintCommits, Deal, Justification, ReconstructCommits, Response, SecretCommits,
     },
 };
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, EnumDisplay)]
+#[derive(Clone, EnumDisplay, Serialize, Deserialize)]
 pub enum DkgMessage {
     PublicKey(Point),
     Deal {
         destination: Point,
+        #[serde(deserialize_with = "Deal::deserialize")]
         deal: Deal<Point>,
     },
     Response {

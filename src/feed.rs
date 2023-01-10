@@ -1,4 +1,5 @@
 use kyber_rs::group::edwards25519::Point;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
 use std::sync::mpsc::{Receiver, RecvError};
@@ -7,7 +8,7 @@ use thiserror::Error;
 /// [Feed] combines polling from a queue of messages and a channel. Message can be delayed
 /// and later placed in the queue.
 #[derive(Debug)]
-pub struct Feed<T: Display> {
+pub struct Feed<T: Display + Serialize> {
     /// Messages from [queue] will be delivered first.
     queue: VecDeque<T>,
 
@@ -20,7 +21,7 @@ pub struct Feed<T: Display> {
     delayed: Vec<T>,
 }
 
-impl<T: Display> Feed<T> {
+impl<T: Display + Serialize> Feed<T> {
     pub(crate) fn new(feed: Receiver<MessageWrapper<T>>, key: Point) -> Self {
         Self {
             queue: VecDeque::new(),
@@ -61,13 +62,13 @@ impl<T: Display> Feed<T> {
     }
 }
 
-#[derive(Clone)]
-pub struct MessageWrapper<T: Display> {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct MessageWrapper<T: Display + Serialize> {
     pub sender: Point,
     pub message: T,
 }
 
-impl<T: Display> Display for MessageWrapper<T> {
+impl<T: Display + Serialize> Display for MessageWrapper<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
             "Broadcasting from {}: {}",

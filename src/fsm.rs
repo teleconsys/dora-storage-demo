@@ -3,6 +3,7 @@ use std::{fmt::Display, sync::mpsc::Sender};
 use anyhow::Error;
 use colored::Colorize;
 use kyber_rs::group::edwards25519::Point;
+use serde::{de::DeserializeOwned, Serialize};
 
 use crate::feed::{Feed, MessageWrapper};
 
@@ -27,7 +28,7 @@ pub trait State<T: StateMachineTypes>: Display + Send {
 }
 
 pub trait StateMachineTypes {
-    type Message: Display + Send + Sync + 'static;
+    type Message: Display + Send + Sync + 'static + Serialize + DeserializeOwned;
     type TerminalStates;
 }
 
