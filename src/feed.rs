@@ -72,7 +72,7 @@ impl<T: Display + Serialize> Display for MessageWrapper<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
             "Broadcasting from {}: {}",
-            &self.sender.string()[..6],
+            &self.sender.to_string()[..6],
             self.message
         ))
     }

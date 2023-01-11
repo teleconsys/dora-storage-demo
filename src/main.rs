@@ -161,7 +161,7 @@ fn main() -> Result<()> {
 
     println!("Listening on port {}", args.port);
 
-    let suite = SuiteEd25519::new_blake_sha256ed25519();
+    let suite = SuiteEd25519::new_blake3_sha256_ed25519();
     let keypair = new_key_pair(&suite)?;
 
     let is_completed = Arc::new(AtomicBool::new(false));
@@ -227,7 +227,7 @@ fn run_demo() -> Result<(), anyhow::Error> {
     let num_nodes = 10;
     let message = "Hello, world!".as_bytes();
 
-    let suite = &SuiteEd25519::new_blake_sha256ed25519();
+    let suite = &SuiteEd25519::new_blake3_sha256_ed25519();
     let keypairs = repeat_with(|| new_key_pair(suite)).flatten();
 
     let mut dkg_broadcast = LocalBroadcast::new();
