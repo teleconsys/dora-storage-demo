@@ -2,11 +2,13 @@ extern crate log;
 extern crate pretty_env_logger;
 
 mod broadcast;
+mod did;
 mod dkg;
 mod feed;
 mod fsm;
 mod host;
 mod node;
+mod pkg;
 mod sign;
 
 use std::{
@@ -217,8 +219,8 @@ fn main() -> Result<()> {
     sign_broadcast_relay_handle.join().unwrap()?;
     sign_listen_relay_handle.join().unwrap()?;
 
-    println!("Public key: {:?}", public_key);
-    println!("Signature: {}", signature);
+    //println!("Public key: {:?}", public_key);
+    //println!("Signature: {}", signature);
 
     Ok(())
 }

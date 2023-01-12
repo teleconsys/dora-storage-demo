@@ -1,10 +1,12 @@
 use std::sync::mpsc::{Receiver, Sender};
 
 use crate::broadcast::LocalBroadcast;
+use crate::did::{new_document, resolve_document};
 use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates, Initializing};
 use crate::feed::{Feed, MessageWrapper};
 use crate::fsm::StateMachine;
 use anyhow::{Ok, Result};
+use kyber_rs::encoding::BinaryMarshaler;
 
 use crate::sign::{self, SignMessage, SignTerminalStates, Signature};
 use kyber_rs::{group::edwards25519::Point, util::key::Pair};
@@ -75,8 +77,12 @@ impl Node {
         let dkg_terminal_state = dkg_fsm.run()?;
         let DkgTerminalStates::Completed { dkg } = dkg_terminal_state;
         let dist_pub_key = dkg.dist_key_share()?.public();
+
+        // Create unsigned DID
+        let document = new_document(&dist_pub_key.marshal_binary()?, "iota-dev", Some(10))?;
+
         let sign_initial_state = sign::InitializingBuilder::try_from(dkg)?
-            .with_message(message)
+            .with_message(document.to_bytes()?)
             .with_secret(self.keypair.private)
             .build()?;
 
@@ -91,6 +97,13 @@ impl Node {
         let sign_terminal_state = sign_fsm.run()?;
 
         let SignTerminalStates::Completed(signature) = sign_terminal_state;
+
+        // Publish signed DID
+        let did_url = document.did_url();
+        document.publish(&signature.to_vec())?;
+        log::info!("Committee's DID has been published, DID URL: {}", did_url);
+
+        let resolved_did = resolve_document(did_url)?;
 
         Ok((signature, dist_pub_key))
     }

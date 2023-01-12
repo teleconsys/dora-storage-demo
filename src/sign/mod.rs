@@ -19,6 +19,12 @@ impl StateMachineTypes for SignTypes {
 
 pub struct Signature(Vec<u8>);
 
+impl Signature {
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.clone()
+    }
+}
+
 impl From<Vec<u8>> for Signature {
     fn from(value: Vec<u8>) -> Self {
         Self(value)
