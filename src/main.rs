@@ -10,6 +10,7 @@ mod host;
 mod node;
 mod pkg;
 mod sign;
+mod strg;
 
 use std::{
     fmt::Display,

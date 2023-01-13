@@ -22,3 +22,4 @@ iota-client = { git = "https://github.com/iotaledger/iota.rs", branch = "product
 identity_iota = { version = "0.6" }
 time = {version = "0.3.5", features = ["std", "serde", "parsing", "formatting"], default-features = false }
 tokio = {version = "1.24.1"}
+rust-s3 = {version = "0.32.3"}
