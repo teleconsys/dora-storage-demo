@@ -3,9 +3,13 @@ FROM rust:alpine3.17 AS build
 # Set the current Working Directory inside the container
 RUN mkdir /scratch
 WORKDIR /scratch
+RUN mkdir /dora-storage
+RUN mkdir /kyber-rs
 
 # Copy everything from the current directory to the PWD(Present Working Directory) inside the container
-COPY . .
+COPY dora-storage/. dora-storage/.
+COPY kyber-rs/. kyber-rs/.
+WORKDIR dora-storage
 
 RUN cargo build --release
 
