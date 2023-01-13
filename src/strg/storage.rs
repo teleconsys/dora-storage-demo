@@ -6,7 +6,7 @@ pub fn test_storage(endpoint: String) -> Result<()> {
     let region = "eu-south-1";
 
     let r = tokio::runtime::Runtime::new()?;
-    let response = r.block_on(Bucket::create(
+    let response = r.block_on(Bucket::create_with_path_style(
         bucket_name,
         Region::Custom {
             region: region.to_owned(),
@@ -19,7 +19,7 @@ pub fn test_storage(endpoint: String) -> Result<()> {
             session_token: None,
             expiration: None,
         },
-        BucketConfiguration::public(),
+        BucketConfiguration::default(),
     ))?;
     assert!(response.success());
     let bucket = Bucket::new(
@@ -35,7 +35,8 @@ pub fn test_storage(endpoint: String) -> Result<()> {
             session_token: None,
             expiration: None,
         },
-    )?;
+    )?
+    .with_path_style();
 
     let s3_path = "test.file";
     let test = b"I'm going to S3!";

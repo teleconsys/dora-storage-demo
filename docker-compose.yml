@@ -3,6 +3,7 @@ version: '3'
 services:
   minio-1:
     container_name: minio
+    hostname: minio-1
     image: minio/minio
     stop_grace_period: 5m
     ports:
