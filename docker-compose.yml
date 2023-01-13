@@ -12,7 +12,7 @@ services:
 
   dora-storage-1:
     container_name: d1
-    image: giordyfish/test-dora-storage
+    image: giordyfish/test-dora-storage:latest
     network_mode: host
     stop_grace_period: 5m
     restart: always
@@ -23,4 +23,4 @@ services:
       - "--storage=minio-1:9000"
       - "::1:9006"
       - "::1:9007"
-      - "-p 9002"
+      - "-p=9002"
