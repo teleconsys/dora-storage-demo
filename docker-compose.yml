@@ -1,7 +1,7 @@
 version: '3'
 
 services:
-  minio:
+  minio-1:
     container_name: minio
     image: minio/minio
     stop_grace_period: 5m
