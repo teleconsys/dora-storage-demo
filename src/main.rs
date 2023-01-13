@@ -18,7 +18,7 @@ use std::{
     iter::repeat_with,
     net::{
         Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpListener, TcpStream,
-        UdpSocket,
+        UdpSocket, IpAddr,
     },
     str::FromStr,
     sync::{
@@ -59,18 +59,23 @@ struct NodeArgs {
 
     #[arg(required = true, short, long)]
     storage: String,
+
+    #[arg(required = true, short, long)]
+    ip: String
 }
 
 struct ListenRelay<T> {
     output: Sender<T>,
+    ip: String,
     port: u16,
     is_closed: Arc<AtomicBool>,
 }
 
 impl<T: DeserializeOwned + Display> ListenRelay<T> {
-    pub fn new(port: u16, output: Sender<T>, is_closed: Arc<AtomicBool>) -> Self {
+    pub fn new(ip: String, port: u16, output: Sender<T>, is_closed: Arc<AtomicBool>) -> Self {
         Self {
             output,
+            ip,
             port,
             is_closed,
         }
@@ -78,7 +83,7 @@ impl<T: DeserializeOwned + Display> ListenRelay<T> {
 
     pub fn listen(&self) -> Result<()> {
         let listener =
-            match TcpListener::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, self.port, 0, 0)) {
+            match TcpListener::bind(SocketAddr::new(IpAddr::from_str(&self.ip)?, self.port)) {
                 Ok(v) => v,
                 Err(e) => {
                     log::error!("Could not listen on port {}: {}", self.port, e);
@@ -176,7 +181,7 @@ fn main() -> Result<()> {
     let (dkg_output_channel, dkg_input_channel_receiver) = mpsc::channel();
 
     let dkg_listen_relay =
-        ListenRelay::new(args.port, dkg_input_channel_sender, is_completed.clone());
+        ListenRelay::new(args.ip.clone(), args.port, dkg_input_channel_sender, is_completed.clone());
     let dkg_broadcast_relay = BroadcastRelay::new(
         dkg_input_channel_receiver,
         args.hosts.iter().map(Into::into).collect(),
@@ -189,6 +194,7 @@ fn main() -> Result<()> {
     let (sign_output_channel, sign_input_channel_receiver) = mpsc::channel();
 
     let sign_listen_relay = ListenRelay::new(
+        args.ip,
         args.port - 1000,
         sign_input_channel_sender,
         is_completed.clone(),
