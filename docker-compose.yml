@@ -28,6 +28,7 @@ services:
       - "--storage=minio-1:9000"
       - "dora-storage-2:9000"
       - "dora-storage-3:9000"
+      - "--ip=dora-storage-1"
       - "-p=9000"
 
   dora-storage-2:
@@ -42,6 +43,7 @@ services:
       - "--storage=minio-1:9000"
       - "dora-storage-1:9000"
       - "dora-storage-3:9000"
+      - "--ip=dora-storage-2"
       - "-p=9000"
 
   dora-storage-3:
@@ -56,6 +58,7 @@ services:
       - "--storage=minio-1:9000"
       - "dora-storage-1:9000"
       - "dora-storage-2:9000"
+      - "--ip=dora-storage-3"
       - "-p=9000"
 
 
