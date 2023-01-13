@@ -21,6 +21,36 @@ services:
         condition: service_started
     command:
       - "--storage=minio-1:9000"
-      - "::1:9006"
-      - "::1:9007"
+      - "dora-storage-2:9003"
+      - "dora-storage-3:9004"
       - "-p=9002"
+
+  dora-storage-2:
+    container_name: d2
+    image: giordyfish/test-dora-storage:latest
+    network_mode: host
+    stop_grace_period: 5m
+    restart: always
+    depends_on:
+      minio-1:
+        condition: service_started
+    command:
+      - "--storage=minio-1:9000"
+      - "dora-storage-1:9002"
+      - "dora-storage-3:9004"
+      - "-p=9003"
+
+  dora-storage-3:
+    container_name: d3
+    image: giordyfish/test-dora-storage:latest
+    network_mode: host
+    stop_grace_period: 5m
+    restart: always
+    depends_on:
+      minio-1:
+        condition: service_started
+    command:
+      - "--storage=minio-1:9000"
+      - "dora-storage-1:9002"
+      - "dora-storage-2:9003"
+      - "-p=9004"
