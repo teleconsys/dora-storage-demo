@@ -1,8 +1,5 @@
 FROM rust:latest AS build
 
-# Ensure ca-certificates are up to date
-RUN update-ca-certificates
-
 # Set the current Working Directory inside the container
 RUN mkdir /scratch
 WORKDIR /scratch
