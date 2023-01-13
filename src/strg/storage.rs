@@ -1,27 +1,11 @@
 use anyhow::Result;
-use s3::{creds::Credentials, Bucket, BucketConfiguration, Region};
+use s3::{creds::Credentials, Bucket, Region};
 
 pub fn test_storage(endpoint: String) -> Result<()> {
     let bucket_name = "test";
     let region = "eu-south-1";
 
     let r = tokio::runtime::Runtime::new()?;
-    let response = r.block_on(Bucket::create_with_path_style(
-        bucket_name,
-        Region::Custom {
-            region: region.to_owned(),
-            endpoint: "http://".to_owned() + endpoint.as_str(),
-        },
-        Credentials {
-            access_key: Some("admin".to_owned()),
-            secret_key: Some("password".to_owned()),
-            security_token: None,
-            session_token: None,
-            expiration: None,
-        },
-        BucketConfiguration::default(),
-    ))?;
-    assert!(response.success());
     let bucket = Bucket::new(
         bucket_name,
         Region::Custom {
