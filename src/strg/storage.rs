@@ -10,7 +10,7 @@ pub fn test_storage(endpoint: String) -> Result<()> {
         bucket_name,
         Region::Custom {
             region: region.to_owned(),
-            endpoint: endpoint.to_owned(),
+            endpoint: "http://".to_owned() + endpoint.as_str(),
         },
         Credentials {
             access_key: Some("admin".to_owned()),
@@ -26,7 +26,7 @@ pub fn test_storage(endpoint: String) -> Result<()> {
         bucket_name,
         Region::Custom {
             region: region.to_owned(),
-            endpoint,
+            endpoint: "http://".to_owned() + endpoint.as_str(),
         },
         Credentials {
             access_key: Some("admin".to_owned()),
