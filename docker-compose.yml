@@ -6,7 +6,6 @@ services:
     image: minio/minio
     stop_grace_period: 5m
     ports:
-      - "9000:9000"
       - "9001:9001"
     expose: 
       - "9000"
@@ -23,12 +22,8 @@ services:
     image: giordyfish/test-dora-storage:latest
     stop_grace_period: 5m
     restart: always
-    expose: 
-      - "9000"
-      - "8000"
-    ports:
-      - "5000:9000"
-      - "5001:8000"
+    environment:
+      - RUST_LOG=fsm=trace,dora=trace
     depends_on:
       minio-1:
         condition: service_started
@@ -43,12 +38,8 @@ services:
     image: giordyfish/test-dora-storage:latest
     stop_grace_period: 5m
     restart: always
-    expose: 
-      - "9000"
-      - "8000"
-    ports:
-      - "5002:9000"
-      - "5003:8000"
+    environment:
+      - RUST_LOG=fsm=trace,dora=trace
     depends_on:
       minio-1:
         condition: service_started
@@ -63,12 +54,8 @@ services:
     image: giordyfish/test-dora-storage:latest
     stop_grace_period: 5m
     restart: always
-    expose: 
-      - "9000"
-      - "8000"
-    ports:
-      - "5004:9000"
-      - "5005:8000"
+    environment:
+      - RUST_LOG=fsm=trace,dora=trace
     depends_on:
       minio-1:
         condition: service_started

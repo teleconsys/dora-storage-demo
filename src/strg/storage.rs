@@ -19,14 +19,14 @@ pub fn test_storage(endpoint: String) -> Result<()> {
             session_token: None,
             expiration: None,
         },
-        BucketConfiguration::default(),
+        BucketConfiguration::public(),
     ))?;
     assert!(response.success());
     let bucket = Bucket::new(
         bucket_name,
         Region::Custom {
             region: region.to_owned(),
-            endpoint: endpoint.to_owned(),
+            endpoint,
         },
         Credentials {
             access_key: Some("admin".to_owned()),
@@ -35,8 +35,7 @@ pub fn test_storage(endpoint: String) -> Result<()> {
             session_token: None,
             expiration: None,
         },
-    )?
-    .with_path_style();
+    )?;
 
     let s3_path = "test.file";
     let test = b"I'm going to S3!";
