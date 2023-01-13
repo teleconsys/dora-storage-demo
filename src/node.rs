@@ -67,7 +67,6 @@ impl Node {
         storage_endpoint: String,
         num_participants: usize,
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
-
         test_storage(storage_endpoint).unwrap_or(println!("ERROR MINIO"));
 
         let dkg_initial_state = Initializing::new(self.keypair.clone(), num_participants);

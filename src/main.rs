@@ -17,8 +17,8 @@ use std::{
     io::{self, Read, Write},
     iter::repeat_with,
     net::{
-        Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpListener, TcpStream,
-        UdpSocket, IpAddr,
+        IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpListener, TcpStream,
+        UdpSocket,
     },
     str::FromStr,
     sync::{
@@ -52,44 +52,38 @@ struct NodeArgs {
     /// Hosts to connect to
     #[arg(required = true, value_name = "HOST:PORT")]
     #[command()]
-    hosts: Vec<Host>,
+    peers: Vec<Host>,
 
     #[arg(required = true, short, long)]
-    port: u16,
+    host: Host,
 
     #[arg(required = true, short, long)]
     storage: String,
-
-    #[arg(required = true, short, long)]
-    ip: String
 }
 
 struct ListenRelay<T> {
     output: Sender<T>,
-    ip: String,
-    port: u16,
+    host: Host,
     is_closed: Arc<AtomicBool>,
 }
 
 impl<T: DeserializeOwned + Display> ListenRelay<T> {
-    pub fn new(ip: String, port: u16, output: Sender<T>, is_closed: Arc<AtomicBool>) -> Self {
+    pub fn new(host: Host, output: Sender<T>, is_closed: Arc<AtomicBool>) -> Self {
         Self {
             output,
-            ip,
-            port,
+            host,
             is_closed,
         }
     }
 
     pub fn listen(&self) -> Result<()> {
-        let listener =
-            match TcpListener::bind(SocketAddr::new(IpAddr::from_str(&self.ip)?, self.port)) {
-                Ok(v) => v,
-                Err(e) => {
-                    log::error!("Could not listen on port {}: {}", self.port, e);
-                    return Err(e.into());
-                }
-            };
+        let listener = match TcpListener::bind(SocketAddr::from(self.host.clone())) {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("Could not listen on port {}: {}", self.host.port(), e);
+                return Err(e.into());
+            }
+        };
 
         log::info!("Listeninig at {}", listener.local_addr()?);
         listener.set_nonblocking(true)?;
@@ -167,10 +161,10 @@ fn main() -> Result<()> {
     let args = NodeArgs::parse();
 
     print!("Connecting to hosts:");
-    args.hosts.iter().for_each(|h| print!(" {}", h));
+    args.peers.iter().for_each(|h| print!(" {}", h));
     println!();
 
-    println!("Listening on port {}", args.port);
+    println!("Listening on port {}", args.host.port());
 
     let suite = SuiteEd25519::new_blake3_sha256_ed25519();
     let keypair = new_key_pair(&suite)?;
@@ -180,11 +174,14 @@ fn main() -> Result<()> {
     let (dkg_input_channel_sender, dkg_input_channel) = mpsc::channel();
     let (dkg_output_channel, dkg_input_channel_receiver) = mpsc::channel();
 
-    let dkg_listen_relay =
-        ListenRelay::new(args.ip.clone(), args.port, dkg_input_channel_sender, is_completed.clone());
+    let dkg_listen_relay = ListenRelay::new(
+        args.host.clone(),
+        dkg_input_channel_sender,
+        is_completed.clone(),
+    );
     let dkg_broadcast_relay = BroadcastRelay::new(
         dkg_input_channel_receiver,
-        args.hosts.iter().map(Into::into).collect(),
+        args.peers.iter().map(Into::into).collect(),
     );
 
     let dkg_listen_relay_handle = thread::spawn(move || dkg_listen_relay.listen());
@@ -194,14 +191,13 @@ fn main() -> Result<()> {
     let (sign_output_channel, sign_input_channel_receiver) = mpsc::channel();
 
     let sign_listen_relay = ListenRelay::new(
-        args.ip,
-        args.port - 1000,
+        args.host.with_port(args.host.port() - 1000),
         sign_input_channel_sender,
         is_completed.clone(),
     );
     let sign_broadcast_relay = BroadcastRelay::new(
         sign_input_channel_receiver,
-        args.hosts
+        args.peers
             .into_iter()
             .map(|h| h.with_port(h.port() - 1000))
             .map(Into::into)
@@ -217,7 +213,7 @@ fn main() -> Result<()> {
         dkg_output_channel,
         sign_input_channel,
         sign_output_channel,
-        args.port as usize,
+        args.host.port() as usize,
     );
 
     let (signature, public_key) = node.run(args.storage, 3)?;

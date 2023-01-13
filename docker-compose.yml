@@ -8,6 +8,8 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
+    expose: 
+      - "9000"
     volumes:
       - minio_storage:/data
     environment:
@@ -21,6 +23,12 @@ services:
     image: giordyfish/test-dora-storage:latest
     stop_grace_period: 5m
     restart: always
+    expose: 
+      - "9000"
+      - "8000"
+    ports:
+      - "5000:9000"
+      - "5001:8000"
     depends_on:
       minio-1:
         condition: service_started
@@ -28,14 +36,19 @@ services:
       - "--storage=minio-1:9000"
       - "dora-storage-2:9000"
       - "dora-storage-3:9000"
-      - "--ip=dora-storage-1"
-      - "-p=9000"
+      - "-h=dora-storage-1:9000"
 
   dora-storage-2:
     container_name: d2
     image: giordyfish/test-dora-storage:latest
     stop_grace_period: 5m
     restart: always
+    expose: 
+      - "9000"
+      - "8000"
+    ports:
+      - "5002:9000"
+      - "5003:8000"
     depends_on:
       minio-1:
         condition: service_started
@@ -43,14 +56,19 @@ services:
       - "--storage=minio-1:9000"
       - "dora-storage-1:9000"
       - "dora-storage-3:9000"
-      - "--ip=dora-storage-2"
-      - "-p=9000"
+      - "-h=dora-storage-2:9000"
 
   dora-storage-3:
     container_name: d3
     image: giordyfish/test-dora-storage:latest
     stop_grace_period: 5m
     restart: always
+    expose: 
+      - "9000"
+      - "8000"
+    ports:
+      - "5004:9000"
+      - "5005:8000"
     depends_on:
       minio-1:
         condition: service_started
@@ -58,8 +76,7 @@ services:
       - "--storage=minio-1:9000"
       - "dora-storage-1:9000"
       - "dora-storage-2:9000"
-      - "--ip=dora-storage-3"
-      - "-p=9000"
+      - "-h=dora-storage-3:9000"
 
 
 #### minio volumes
