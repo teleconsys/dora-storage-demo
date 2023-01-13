@@ -13,6 +13,10 @@ WORKDIR dora-storage
 
 RUN cargo build --release
 
+WORKDIR /scratch
+RUN mkdir /app
+RUN mv dora-storage/target/release/dora-storage /app
+
 ############################
 # Image
 ############################
@@ -23,7 +27,7 @@ FROM gcr.io/distroless/cc-debian11:nonroot
 EXPOSE 9091/tcp
 
 # Copy the app dir into distroless image
-COPY --chown=nonroot:nonroot --from=build /target/release /app
+COPY --chown=nonroot:nonroot --from=build /app /app
 
 WORKDIR /app
 USER nonroot
