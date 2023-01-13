@@ -27,8 +27,8 @@ RUN mv dora-storage/target/release/dora-storage /app
 # using distroless cc "nonroot" image, which includes everything in the base image (glibc, libssl and openssl)
 FROM gcr.io/distroless/cc-debian11:nonroot
 
-EXPOSE 9000/tcp
-EXPOSE 8000/tcp
+EXPOSE 9000
+EXPOSE 8000
 
 # Copy the app dir into distroless image
 COPY --chown=nonroot:nonroot --from=build /app /app
