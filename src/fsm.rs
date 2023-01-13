@@ -1,13 +1,11 @@
-use std::{fmt::Display, sync::Arc, time::Duration};
+use std::{fmt::Display, sync::mpsc::Sender};
 
 use anyhow::Error;
-use async_trait::async_trait;
 use colored::Colorize;
-use futures::lock::Mutex;
 use kyber_rs::group::edwards25519::Point;
-use thiserror::Error;
+use serde::{de::DeserializeOwned, Serialize};
 
-use crate::feed::Feed;
+use crate::feed::{Feed, MessageWrapper};
 
 pub type BoxedState<T> = Box<dyn State<T>>;
 
@@ -30,41 +28,46 @@ pub trait State<T: StateMachineTypes>: Display + Send {
 }
 
 pub trait StateMachineTypes {
-    type Message: Display;
-    type Receiver: Receiver<Self::Message>;
+    type Message: Display + Send + Sync + 'static + Serialize + DeserializeOwned;
     type TerminalStates;
 }
 
 pub struct StateMachine<T: StateMachineTypes> {
     id: usize,
+    key: Point,
     state: BoxedState<T>,
-    message_output: Box<dyn Sender<T::Message>>,
-    message_input: Feed<T::Message, T::Receiver>,
+    message_output: Sender<MessageWrapper<T::Message>>,
+    message_input: Feed<T::Message>,
 }
 
 impl<T: StateMachineTypes> StateMachine<T> {
     fn log_target(&self) -> String {
         format!("fsm:node_{}", self.id)
     }
-    pub fn new(
+    pub fn new<F: Into<Feed<T::Message>>>(
         initial_state: BoxedState<T>,
-        input_channel: Feed<T::Message, T::Receiver>,
-        output_channel: Box<dyn Sender<T::Message>>,
+        input_channel: F,
+        output_channel: Sender<MessageWrapper<T::Message>>,
         id: usize,
+        key: Point,
     ) -> StateMachine<T> {
         Self {
             id,
+            key,
             state: initial_state,
             message_output: output_channel,
-            message_input: input_channel,
+            message_input: input_channel.into(),
         }
     }
 
-    pub async fn run(&mut self) -> Result<T::TerminalStates, Error> {
+    pub fn run(&mut self) -> Result<T::TerminalStates, Error> {
         loop {
             let messages: Vec<T::Message> = self.state.initialize();
             for message in messages {
-                self.message_output.send(message).await;
+                self.message_output.send(MessageWrapper {
+                    sender: self.key.clone(),
+                    message,
+                })?;
             }
 
             self.message_input.refresh();
@@ -80,7 +83,7 @@ impl<T: StateMachineTypes> StateMachine<T> {
                     .map_err(|e| Error::msg(format!("[{}] Failed transition: {}", self.id, e)))?;
                 match transition {
                     Transition::Same => {
-                        match self.message_input.next().await {
+                        match self.message_input.next() {
                             Ok(next_message) => match self.state.deliver(next_message) {
                                 DeliveryStatus::Delivered => {}
                                 DeliveryStatus::Unexpected(m) => {
@@ -122,76 +125,5 @@ impl<T: StateMachineTypes> StateMachine<T> {
                 }
             }
         }
-    }
-}
-
-#[async_trait]
-pub trait Sender<M>: Send {
-    async fn send(&mut self, msg: M);
-}
-
-#[async_trait]
-pub trait Receiver<M>: Send {
-    async fn receive(&mut self) -> Result<M, ReceiverError>;
-}
-
-#[derive(Error, Debug)]
-pub enum ReceiverError {
-    #[error("No new messages")]
-    NoNewMessages,
-    #[error("Something has gone wrong while receiving: {error}")]
-    FailedToReceive { error: Error },
-}
-
-pub struct MessageWrapper<M> {
-    pub sender: Point,
-    pub message: M,
-}
-
-pub struct IoBus<M> {
-    messages: Arc<Mutex<Vec<MessageWrapper<M>>>>,
-    read_index: usize,
-    own_key: Point,
-}
-
-impl<M> IoBus<M> {
-    pub fn new(messages: Arc<Mutex<Vec<MessageWrapper<M>>>>, key: Point) -> IoBus<M> {
-        Self {
-            messages,
-            read_index: 0,
-            own_key: key,
-        }
-    }
-}
-
-#[async_trait]
-impl<M: Send> Sender<M> for IoBus<M> {
-    async fn send(&mut self, msg: M) {
-        self.messages.lock().await.push(MessageWrapper {
-            sender: self.own_key.clone(),
-            message: msg,
-        });
-    }
-}
-
-#[async_trait]
-impl<M: Send> Receiver<M> for IoBus<M>
-where
-    M: ToOwned<Owned = M>,
-    M: Send,
-{
-    async fn receive(&mut self) -> Result<M, ReceiverError> {
-        let m = self.messages.lock().await;
-        if let Some(msg) = m.get(self.read_index) {
-            self.read_index += 1;
-            if msg.sender == self.own_key {
-                log::trace!("Skipping own message");
-                return Err(ReceiverError::NoNewMessages);
-            }
-            return Ok(msg.message.to_owned());
-        }
-        drop(m);
-        async_std::task::sleep(Duration::from_millis(1)).await;
-        Err(ReceiverError::NoNewMessages)
     }
 }

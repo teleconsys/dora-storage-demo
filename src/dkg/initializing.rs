@@ -54,9 +54,9 @@ impl State<DkgTypes> for Initializing {
         match self.public_keys.len() {
             n if n == self.num_participants => {
                 let mut public_keys = self.public_keys.clone();
-                public_keys.sort_by_key(|pk| pk.string());
+                public_keys.sort_by_key(|pk| pk.to_string());
                 let dkg = new_dist_key_generator(
-                    &SuiteEd25519::new_blake_sha256ed25519(),
+                    &SuiteEd25519::new_blake3_sha256_ed25519(),
                     &self.key.private,
                     &public_keys,
                     self.num_participants / 2 + 1,

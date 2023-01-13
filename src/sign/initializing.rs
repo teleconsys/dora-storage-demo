@@ -9,9 +9,7 @@ use kyber_rs::{
     sign::dss::{new_dss, PartialSig, DSS},
 };
 
-use crate::{
-    fsm::{DeliveryStatus, State, Transition},
-};
+use crate::fsm::{DeliveryStatus, State, Transition};
 
 use super::{messages::SignMessage, SignTerminalStates, SignTypes, Signature};
 
@@ -21,7 +19,7 @@ pub struct Initializing {
 }
 
 impl Initializing {
-    fn new(
+    pub fn _new(
         suite: SuiteEd25519,
         secret: &Scalar,
         participants: &[Point],
