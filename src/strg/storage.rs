@@ -1,15 +1,14 @@
 use s3::{Region, Bucket, creds::Credentials, BucketConfiguration};
 use anyhow::Result;
 
-fn test_storage() -> Result<()> {
+pub fn test_storage(endpoint: String) -> Result<()> {
     let bucket_name = "test";
     let region = "eu-south-1";
-    let endpoint = "http://localhost:10000";
 
     let r = tokio::runtime::Runtime::new()?;
-    let response = r.block_on(Bucket::create(bucket_name, Region::Custom { region: region.to_owned(), endpoint: endpoint.to_owned() }, Credentials::default(), BucketConfiguration::default()))?;
+    let response = r.block_on(Bucket::create(bucket_name, Region::Custom { region: region.to_owned(), endpoint: endpoint.to_owned() }, Credentials { access_key: Some("admin".to_owned()), secret_key: Some("password".to_owned()), security_token: None, session_token: None, expiration: None }, BucketConfiguration::default()))?;
     assert!(response.success());
-    let bucket = Bucket::new(bucket_name, Region::Custom { region: region.to_owned(), endpoint: endpoint.to_owned() }, Credentials::default()?)?.with_path_style();
+    let bucket = Bucket::new(bucket_name, Region::Custom { region: region.to_owned(), endpoint: endpoint.to_owned() }, Credentials { access_key: Some("admin".to_owned()), secret_key: Some("password".to_owned()), security_token: None, session_token: None, expiration: None })?.with_path_style();
 
     let s3_path = "test.file";
     let test = b"I'm going to S3!";

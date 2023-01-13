@@ -56,6 +56,9 @@ struct NodeArgs {
 
     #[arg(required = true, short, long)]
     port: u16,
+
+    #[arg(required = true, short, long)]
+    storage: String,
 }
 
 struct ListenRelay<T> {
@@ -211,7 +214,7 @@ fn main() -> Result<()> {
         args.port as usize,
     );
 
-    let (signature, public_key) = node.run("Hello".into(), 3)?;
+    let (signature, public_key) = node.run(args.storage, 3)?;
 
     is_completed.store(true, Ordering::SeqCst);
 
@@ -248,7 +251,7 @@ fn run_demo() -> Result<(), anyhow::Error> {
 
     let outputs: Vec<(Signature, Point)> = nodes
         .into_iter()
-        .map(|n| thread::spawn(move || n.run(message.to_vec(), num_nodes)))
+        .map(|n| thread::spawn(move || n.run("message".to_owned(), num_nodes)))
         .collect::<Vec<JoinHandle<_>>>()
         .into_iter()
         .map(JoinHandle::join)

@@ -1906,15 +1906,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "iota-crypto"
-version = "0.15.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e04d492224bff6e97142f033d0a4383bcbc05918be1ff7b3abd2c1cc85205a2"
-dependencies = [
- "autocfg",
-]
-
-[[package]]
 name = "iota_stronghold"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1991,7 +1982,6 @@ dependencies = [
  "hex",
  "hkdf",
  "impl_ops",
- "iota-crypto 0.15.3",
  "lazy_static",
  "num-bigint-dig",
  "num-traits",

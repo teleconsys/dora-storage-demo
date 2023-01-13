@@ -62,7 +62,7 @@ pub fn create_unsigned_did(
     let service_address: IotaService = Service::from_json_value(json!({
         "id": document.id().to_url().join("#iota-address-0")?,
         "type": "IotaAddress",
-        "serviceEndpoint": "iota://".to_owned() + &address,
+        "serviceEndpoint": "iota://".to_owned() + address.as_str(),
     }))?;
     document.insert_service(service_address);
 
