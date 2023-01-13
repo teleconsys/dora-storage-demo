@@ -1,4 +1,4 @@
-FROM rust:alpine3.17 AS build
+FROM rust:latest AS build
 
 # Set the current Working Directory inside the container
 RUN mkdir /scratch
