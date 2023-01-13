@@ -1,5 +1,8 @@
 FROM rust:latest AS build
 
+# Ensure ca-certificates are up to date
+RUN update-ca-certificates
+
 # Set the current Working Directory inside the container
 RUN mkdir /scratch
 WORKDIR /scratch
@@ -9,7 +12,7 @@ RUN mkdir /kyber-rs
 # Copy everything from the current directory to the PWD(Present Working Directory) inside the container
 COPY dora-storage/. dora-storage/.
 COPY kyber-rs/. kyber-rs/.
-WORKDIR dora-storage
+WORKDIR /scratch/dora-storage
 
 RUN cargo build --release
 
@@ -25,6 +28,9 @@ RUN mv dora-storage/target/release/dora-storage /app
 FROM gcr.io/distroless/cc-debian11:nonroot
 
 EXPOSE 9091/tcp
+EXPOSE 9002/tcp
+EXPOSE 9003/tcp
+EXPOSE 9004/tcp
 
 # Copy the app dir into distroless image
 COPY --chown=nonroot:nonroot --from=build /app /app
