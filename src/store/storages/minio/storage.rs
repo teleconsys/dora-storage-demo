@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use s3::{creds::Credentials, Bucket, BucketConfiguration, Region};
+use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 
 use crate::store::Storage;
 
@@ -8,11 +8,13 @@ pub fn setup_minio_local_storage(
     access_key: Option<String>,
     secret_key: Option<String>,
 ) -> Result<Storage> {
-    let bucket_name = "test";
+    
+    let bucket_name = "dora-node-bucket";
     let region = Region::Custom {
         region: "eu-south-1".to_owned(),
         endpoint: "http://".to_owned() + endpoint.as_str(),
     };
+
     let credentials = Credentials {
         access_key,
         secret_key,
@@ -27,12 +29,16 @@ pub fn setup_minio_local_storage(
         region.clone(),
         credentials.clone(),
         BucketConfiguration::public(),
-    ))?;
-    let mut bucket = response.bucket;
-    match response.response_code {
-        200 => (),
-        409 => bucket = Bucket::new(bucket_name, region, credentials)?,
-        _ => bail!("minio can't instantiate a bucket"),
-    };
-    Ok(Storage::MinioLocal { bucket })
+    ));
+
+    match response {
+        Ok(r) => Ok(Storage::MinioLocal { bucket: r.bucket }),
+        Err(e) => if let S3Error::Http(409, ..) = e {
+            Ok(Storage::MinioLocal {
+            bucket: Bucket::new(bucket_name, region, credentials)?,
+        })
+        } else {
+            bail!("{}", e)
+        },
+    }
 }
