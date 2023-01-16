@@ -195,7 +195,6 @@ fn main() -> Result<()> {
     println!("Listening on port {}", args.host.port());
 
     let suite = SuiteEd25519::new_blake3_sha256_ed25519();
-    let suite = SuiteEd25519::new_blake3_sha256_ed25519();
     let eddsa = EdDSA::new(&mut suite.random_stream())?;
 
     if let Some(network) = args.did_network.clone() {

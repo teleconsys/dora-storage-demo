@@ -59,6 +59,7 @@ services:
       - "dora-storage-2:9000"
       - "dora-storage-3:9000"
       - "-h=dora-storage-1:9000"
+      - "--did-network=iota-main"
 
   dora-storage-2:
     container_name: d2
@@ -78,6 +79,7 @@ services:
       - "dora-storage-1:9000"
       - "dora-storage-3:9000"
       - "-h=dora-storage-2:9000"
+      - "--did-network=iota-main"
 
   dora-storage-3:
     container_name: d3
@@ -97,6 +99,7 @@ services:
       - "dora-storage-1:9000"
       - "dora-storage-2:9000"
       - "-h=dora-storage-3:9000"
+      - "--did-network=iota-main"
 
 
 #### minio volumes
