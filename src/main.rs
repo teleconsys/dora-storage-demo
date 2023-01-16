@@ -4,13 +4,13 @@ extern crate pretty_env_logger;
 mod broadcast;
 mod did;
 mod dkg;
+mod dlt;
 mod feed;
 mod fsm;
 mod host;
 mod node;
-mod pkg;
 mod sign;
-mod strg;
+mod store;
 
 use std::{
     fmt::Display,
@@ -45,6 +45,8 @@ use node::Node;
 use serde::{de::DeserializeOwned, Serialize};
 use sign::Signature;
 
+use crate::store::new_storage;
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 #[group()]
@@ -59,6 +61,15 @@ struct NodeArgs {
 
     #[arg(required = true, short, long)]
     storage: String,
+
+    #[arg(long, default_value = None)]
+    storage_endpoint: Option<String>,
+
+    #[arg(long, default_value = None)]
+    storage_access_key: Option<String>,
+
+    #[arg(long, default_value = None)]
+    storage_secret_key: Option<String>,
 }
 
 struct ListenRelay<T> {
@@ -160,9 +171,21 @@ fn main() -> Result<()> {
     pretty_env_logger::init();
     let args = NodeArgs::parse();
 
+    println!("Setting up storage... ");
+    let storage = new_storage(
+        &args.storage,
+        args.storage_access_key,
+        args.storage_secret_key,
+        args.storage_endpoint,
+    )?;
+    print!("OK");
+
+    println!("Checking storage health... ");
+    storage.health_check()?;
+    print!("OK");
+
     print!("Connecting to hosts:");
     args.peers.iter().for_each(|h| print!(" {}", h));
-    println!();
 
     println!("Listening on port {}", args.host.port());
 
@@ -216,7 +239,7 @@ fn main() -> Result<()> {
         args.host.port() as usize,
     );
 
-    let (signature, public_key) = node.run(args.storage, 3)?;
+    let (signature, public_key) = node.run(storage, 3)?;
 
     is_completed.store(true, Ordering::SeqCst);
 
@@ -231,44 +254,44 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_demo() -> Result<(), anyhow::Error> {
-    let num_nodes = 10;
-    let message = "Hello, world!".as_bytes();
+// fn run_demo() -> Result<(), anyhow::Error> {
+//     let num_nodes = 10;
+//     let message = "Hello, world!".as_bytes();
 
-    let suite = &SuiteEd25519::new_blake3_sha256_ed25519();
-    let keypairs = repeat_with(|| new_key_pair(suite)).flatten();
+//     let suite = &SuiteEd25519::new_blake3_sha256_ed25519();
+//     let keypairs = repeat_with(|| new_key_pair(suite)).flatten();
 
-    let mut dkg_broadcast = LocalBroadcast::new();
-    let mut sign_broadcast = LocalBroadcast::new();
+//     let mut dkg_broadcast = LocalBroadcast::new();
+//     let mut sign_broadcast = LocalBroadcast::new();
 
-    let nodes: Vec<Node> = keypairs
-        .into_iter()
-        .enumerate()
-        .map(|(i, keypair)| Node::new_local(keypair, i, &mut dkg_broadcast, &mut sign_broadcast))
-        .take(num_nodes)
-        .collect();
+//     let nodes: Vec<Node> = keypairs
+//         .into_iter()
+//         .enumerate()
+//         .map(|(i, keypair)| Node::new_local(keypair, i, &mut dkg_broadcast, &mut sign_broadcast))
+//         .take(num_nodes)
+//         .collect();
 
-    let sign_broadcast_handle = sign_broadcast.start();
-    let dkg_broadcast_handle = dkg_broadcast.start();
+//     let sign_broadcast_handle = sign_broadcast.start();
+//     let dkg_broadcast_handle = dkg_broadcast.start();
 
-    let outputs: Vec<(Signature, Point)> = nodes
-        .into_iter()
-        .map(|n| thread::spawn(move || n.run("message".to_owned(), num_nodes)))
-        .collect::<Vec<JoinHandle<_>>>()
-        .into_iter()
-        .map(JoinHandle::join)
-        .map(Result::unwrap)
-        .collect::<Result<_, _>>()?;
+//     let outputs: Vec<(Signature, Point)> = nodes
+//         .into_iter()
+//         .map(|n| thread::spawn(move || n.run("message".to_owned(), num_nodes)))
+//         .collect::<Vec<JoinHandle<_>>>()
+//         .into_iter()
+//         .map(JoinHandle::join)
+//         .map(Result::unwrap)
+//         .collect::<Result<_, _>>()?;
 
-    for (signature, dist_public_key) in outputs {
-        println!("Signature: {}", signature);
+//     for (signature, dist_public_key) in outputs {
+//         println!("Signature: {}", signature);
 
-        let is_valid = eddsa::verify(&dist_public_key, message, (&signature).into()).is_ok();
-        println!("Valid: {}", is_valid)
-    }
+//         let is_valid = eddsa::verify(&dist_public_key, message, (&signature).into()).is_ok();
+//         println!("Valid: {}", is_valid)
+//     }
 
-    dkg_broadcast_handle.join().unwrap();
-    sign_broadcast_handle.join().unwrap();
+//     dkg_broadcast_handle.join().unwrap();
+//     sign_broadcast_handle.join().unwrap();
 
-    Ok(())
-}
+//     Ok(())
+// }

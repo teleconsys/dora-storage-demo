@@ -5,7 +5,7 @@ use crate::did::{new_document, resolve_document};
 use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates, Initializing};
 use crate::feed::{Feed, MessageWrapper};
 use crate::fsm::StateMachine;
-use crate::strg::test_storage;
+use crate::store::Storage;
 use anyhow::{Ok, Result};
 use kyber_rs::encoding::BinaryMarshaler;
 
@@ -64,11 +64,9 @@ impl Node {
 
     pub fn run(
         self,
-        storage_endpoint: String,
+        storage: Storage,
         num_participants: usize,
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
-        test_storage(storage_endpoint)?;
-
         let dkg_initial_state = Initializing::new(self.keypair.clone(), num_participants);
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),

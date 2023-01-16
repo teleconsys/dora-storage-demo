@@ -1,6 +1,6 @@
 use identity_iota::{core::ToJson, prelude::IotaDocument};
 
-use crate::pkg::iota::{create_unsigned_did, publish_did, resolve_did};
+use crate::dlt::iota::{create_unsigned_did, publish_did, resolve_did};
 use anyhow::Result;
 
 pub enum Document {
