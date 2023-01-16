@@ -8,7 +8,6 @@ pub fn setup_minio_local_storage(
     access_key: Option<String>,
     secret_key: Option<String>,
 ) -> Result<Storage> {
-
     let bucket_name = "dora-node-bucket";
     let region = Region::Custom {
         region: "eu-south-1".to_owned(),
@@ -33,12 +32,14 @@ pub fn setup_minio_local_storage(
 
     match response {
         Ok(r) => Ok(Storage::MinioLocal { bucket: r.bucket }),
-        Err(e) => if let S3Error::Http(409, ..) = e {
-            Ok(Storage::MinioLocal {
-            bucket: Bucket::new(bucket_name, region, credentials)?,
-        })
-        } else {
-            bail!("{}", e)
-        },
+        Err(e) => {
+            if let S3Error::Http(409, ..) = e {
+                Ok(Storage::MinioLocal {
+                    bucket: Bucket::new(bucket_name, region, credentials)?.with_path_style(),
+                })
+            } else {
+                bail!("{}", e)
+            }
+        }
     }
 }
