@@ -8,7 +8,7 @@ pub fn setup_minio_local_storage(
     access_key: Option<String>,
     secret_key: Option<String>,
 ) -> Result<Storage> {
-    
+
     let bucket_name = "dora-node-bucket";
     let region = Region::Custom {
         region: "eu-south-1".to_owned(),
@@ -28,7 +28,7 @@ pub fn setup_minio_local_storage(
         bucket_name,
         region.clone(),
         credentials.clone(),
-        BucketConfiguration::public(),
+        BucketConfiguration::default(),
     ));
 
     match response {

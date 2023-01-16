@@ -178,13 +178,13 @@ fn main() -> Result<()> {
         args.storage_secret_key,
         args.storage_endpoint,
     )?;
-    print!("OK");
+    println!("OK");
 
     println!("Checking storage health... ");
     storage.health_check()?;
-    print!("OK");
+    println!("OK");
 
-    print!("Connecting to hosts:");
+    println!("Connecting to hosts:");
     args.peers.iter().for_each(|h| print!(" {}", h));
 
     println!("Listening on port {}", args.host.port());
