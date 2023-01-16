@@ -2,8 +2,9 @@ use std::fmt::Display;
 
 use anyhow::Error;
 use kyber_rs::{
-    group::edwards25519::{Point, SuiteEd25519},
+    group::edwards25519::{Curve, Point, SuiteEd25519},
     share::dkg::rabin::new_dist_key_generator,
+    sign::eddsa::EdDSA,
     util::key::Pair,
 };
 
@@ -12,7 +13,7 @@ use crate::fsm::{DeliveryStatus, State, Transition};
 use super::{processing_deals::ProcessingDeals, DkgMessage, DkgTypes};
 
 pub struct Initializing {
-    key: Pair<Point>,
+    key: EdDSA<Curve>,
     num_participants: usize,
     public_keys: Vec<Point>,
 }
@@ -24,7 +25,7 @@ impl Display for Initializing {
 }
 
 impl Initializing {
-    pub fn new(key: Pair<Point>, num_participants: usize) -> Initializing {
+    pub fn new(key: EdDSA<Curve>, num_participants: usize) -> Initializing {
         let mut public_keys = Vec::with_capacity(num_participants);
         public_keys.push(key.public.clone());
         Self {
@@ -57,7 +58,7 @@ impl State<DkgTypes> for Initializing {
                 public_keys.sort_by_key(|pk| pk.to_string());
                 let dkg = new_dist_key_generator(
                     &SuiteEd25519::new_blake3_sha256_ed25519(),
-                    &self.key.private,
+                    &self.key.secret,
                     &public_keys,
                     self.num_participants / 2 + 1,
                 )?;

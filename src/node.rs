@@ -8,12 +8,14 @@ use crate::fsm::StateMachine;
 use crate::store::Storage;
 use anyhow::{Ok, Result};
 use kyber_rs::encoding::BinaryMarshaler;
+use kyber_rs::group::edwards25519::Curve;
+use kyber_rs::sign::eddsa::EdDSA;
 
 use crate::sign::{self, SignMessage, SignTerminalStates, Signature};
 use kyber_rs::{group::edwards25519::Point, util::key::Pair};
 
 pub struct Node {
-    keypair: Pair<Point>,
+    keypair: EdDSA<Curve>,
     dkg_input_channel: Receiver<MessageWrapper<DkgMessage>>,
     sign_input_channel: Receiver<MessageWrapper<SignMessage>>,
     dkg_output_channel: Sender<MessageWrapper<DkgMessage>>,
@@ -23,7 +25,7 @@ pub struct Node {
 
 impl Node {
     pub fn new(
-        keypair: Pair<Point>,
+        keypair: EdDSA<Curve>,
         dkg_input_channel: Receiver<MessageWrapper<DkgMessage>>,
         dkg_output_channel: Sender<MessageWrapper<DkgMessage>>,
         sign_input_channel: Receiver<MessageWrapper<SignMessage>>,
@@ -41,7 +43,7 @@ impl Node {
     }
 
     pub fn new_local(
-        keypair: Pair<Point>,
+        keypair: EdDSA<Curve>,
         index: usize,
         dkg_broadcast: &mut LocalBroadcast<MessageWrapper<DkgMessage>>,
         sign_broadcast: &mut LocalBroadcast<MessageWrapper<SignMessage>>,
@@ -65,46 +67,55 @@ impl Node {
     pub fn run(
         self,
         storage: Storage,
+        did_network: Option<String>,
         num_participants: usize,
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
-        let dkg_initial_state = Initializing::new(self.keypair.clone(), num_participants);
+        let secret = self.keypair.secret.clone();
+        let public = self.keypair.public.clone();
+        let dkg_initial_state = Initializing::new(self.keypair, num_participants);
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
-            Feed::new(self.dkg_input_channel, self.keypair.public.clone()),
+            Feed::new(self.dkg_input_channel, public.clone()),
             self.dkg_output_channel,
             self.id,
-            self.keypair.public.clone(),
+            public.clone(),
         );
         let dkg_terminal_state = dkg_fsm.run()?;
         let DkgTerminalStates::Completed { dkg } = dkg_terminal_state;
         let dist_pub_key = dkg.dist_key_share()?.public();
 
+        let mut network = "iota-dev".to_owned();
+        if let Some(net) = did_network.clone() {
+            network = net;
+        }
         // Create unsigned DID
-        let document = new_document(&dist_pub_key.marshal_binary()?, "iota-dev", Some(10))?;
+        let document = new_document(&dist_pub_key.marshal_binary()?, &network, Some(20))?;
 
         let sign_initial_state = sign::InitializingBuilder::try_from(dkg)?
             .with_message(document.to_bytes()?)
-            .with_secret(self.keypair.private)
+            .with_secret(secret)
             .build()?;
 
         let mut sign_fsm = StateMachine::new(
             Box::new(sign_initial_state),
-            Feed::new(self.sign_input_channel, self.keypair.public.clone()),
+            Feed::new(self.sign_input_channel, public.clone()),
             self.sign_output_channel,
             self.id,
-            self.keypair.public,
+            public,
         );
 
         let sign_terminal_state = sign_fsm.run()?;
 
         let SignTerminalStates::Completed(signature) = sign_terminal_state;
 
-        // Publish signed DID
-        let did_url = document.did_url();
-        document.publish(&signature.to_vec())?;
-        log::info!("Committee's DID has been published, DID URL: {}", did_url);
+        if let Some(_) = did_network {
+            // Publish signed DID
+            let did_url = document.did_url();
+            document.publish(&signature.to_vec())?;
+            log::info!("Committee's DID has been published, DID URL: {}", did_url);
 
-        let resolved_did = resolve_document(did_url)?;
+            let resolved_did = resolve_document(did_url)?;
+        }
 
         Ok((signature, dist_pub_key))
     }

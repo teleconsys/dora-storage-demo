@@ -37,15 +37,17 @@ use broadcast::LocalBroadcast;
 use clap::{Arg, Args, Parser};
 use host::Host;
 use kyber_rs::{
+    encoding::BinaryMarshaler,
     group::edwards25519::{Point, SuiteEd25519},
-    sign::eddsa,
+    sign::eddsa::{self, EdDSA},
     util::key::new_key_pair,
+    Random,
 };
 use node::Node;
 use serde::{de::DeserializeOwned, Serialize};
 use sign::Signature;
 
-use crate::store::new_storage;
+use crate::{did::new_document, store::new_storage};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -70,6 +72,9 @@ struct NodeArgs {
 
     #[arg(long = "storage-secret-key", default_value = None)]
     storage_secret_key: Option<String>,
+
+    #[arg(long = "did-network", default_value = None)]
+    did_network: Option<String>,
 }
 
 struct ListenRelay<T> {
@@ -190,7 +195,14 @@ fn main() -> Result<()> {
     println!("Listening on port {}", args.host.port());
 
     let suite = SuiteEd25519::new_blake3_sha256_ed25519();
-    let keypair = new_key_pair(&suite)?;
+    let suite = SuiteEd25519::new_blake3_sha256_ed25519();
+    let eddsa = EdDSA::new(&mut suite.random_stream())?;
+
+    if let Some(network) = args.did_network.clone() {
+        let document = new_document(&eddsa.public.marshal_binary()?, &network, None)?;
+        let signature = eddsa.sign(&document.to_bytes()?)?;
+        document.publish(&signature)?;
+    }
 
     let is_completed = Arc::new(AtomicBool::new(false));
 
@@ -231,7 +243,7 @@ fn main() -> Result<()> {
     let sign_broadcast_relay_handle = thread::spawn(move || sign_broadcast_relay.broadcast());
 
     let node = Node::new(
-        keypair,
+        eddsa,
         dkg_input_channel,
         dkg_output_channel,
         sign_input_channel,
@@ -239,7 +251,7 @@ fn main() -> Result<()> {
         args.host.port() as usize,
     );
 
-    let (signature, public_key) = node.run(storage, 3)?;
+    let (signature, public_key) = node.run(storage, args.did_network, 3)?;
 
     is_completed.store(true, Ordering::SeqCst);
 
