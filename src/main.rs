@@ -62,13 +62,13 @@ struct NodeArgs {
     #[arg(required = true, short, long)]
     storage: String,
 
-    #[arg(long, default_value = None)]
+    #[arg(long = "storage-endpoint", default_value = None)]
     storage_endpoint: Option<String>,
 
-    #[arg(long, default_value = None)]
+    #[arg(long = "storage-access-key", default_value = None)]
     storage_access_key: Option<String>,
 
-    #[arg(long, default_value = None)]
+    #[arg(long = "storage-secret-key", default_value = None)]
     storage_secret_key: Option<String>,
 }
 

@@ -53,9 +53,9 @@ services:
         condition: service_started
     command:
       - "--storage=minio-local"
-      - "--storage_endpoint=minio-1:9000"
-      - "--storage_access_key=admin"
-      - "--storage_secret_key=password"
+      - "--storage-endpoint=minio-1:9000"
+      - "--storage-access-key=admin"
+      - "--storage-secret-key=password"
       - "dora-storage-2:9000"
       - "dora-storage-3:9000"
       - "-h=dora-storage-1:9000"
@@ -72,9 +72,9 @@ services:
         condition: service_started
     command:
       - "--storage=minio-local"
-      - "--storage_endpoint=minio-2:9000"
-      - "--storage_access_key=admin"
-      - "--storage_secret_key=password"
+      - "--storage-endpoint=minio-2:9000"
+      - "--storage-access-key=admin"
+      - "--storage-secret-key=password"
       - "dora-storage-1:9000"
       - "dora-storage-3:9000"
       - "-h=dora-storage-2:9000"
@@ -91,9 +91,9 @@ services:
         condition: service_started
     command:
       - "--storage=minio-local"
-      - "--storage_endpoint=minio-3:9000"
-      - "--storage_access_key=admin"
-      - "--storage_secret_key=password"
+      - "--storage-endpoint=minio-3:9000"
+      - "--storage-access-key=admin"
+      - "--storage-secret-key=password"
       - "dora-storage-1:9000"
       - "dora-storage-2:9000"
       - "-h=dora-storage-3:9000"
