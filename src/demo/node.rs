@@ -1,14 +1,14 @@
 use std::sync::mpsc::{Receiver, Sender};
 
-use crate::broadcast::LocalBroadcast;
 use crate::did::{new_document, resolve_document};
 use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates, Initializing};
-use crate::feed::{Feed, MessageWrapper};
-use crate::fsm::StateMachine;
+use crate::net::broadcast::LocalBroadcast;
+use crate::states::feed::{Feed, MessageWrapper};
+use crate::states::fsm::StateMachine;
 use anyhow::{Ok, Result};
 use kyber_rs::encoding::BinaryMarshaler;
 
-use crate::sign::{self, SignMessage, SignTerminalStates, Signature};
+use crate::states::sign::{self, SignMessage, SignTerminalStates, Signature};
 use kyber_rs::{group::edwards25519::Point, util::key::Pair};
 
 pub struct Node {

@@ -1,4 +1,4 @@
-use crate::fsm::{DeliveryStatus, State, Transition};
+use crate::states::fsm::{DeliveryStatus, State, Transition};
 use anyhow::Error;
 use kyber_rs::{
     group::edwards25519::SuiteEd25519,

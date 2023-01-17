@@ -7,7 +7,7 @@ use kyber_rs::{
     util::key::Pair,
 };
 
-use crate::fsm::{DeliveryStatus, State, Transition};
+use crate::states::fsm::{DeliveryStatus, State, Transition};
 
 use super::{processing_deals::ProcessingDeals, DkgMessage, DkgTypes};
 

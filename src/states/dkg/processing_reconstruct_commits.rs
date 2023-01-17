@@ -5,7 +5,7 @@ use kyber_rs::{
     share::dkg::rabin::{DistKeyGenerator, ReconstructCommits},
 };
 
-use crate::fsm::{State, Transition};
+use crate::states::fsm::{DeliveryStatus, State, Transition};
 
 use super::{DkgMessage, DkgTerminalStates, DkgTypes};
 
@@ -41,17 +41,17 @@ impl State<DkgTypes> for ProcessingReconstructCommits {
             .collect()
     }
 
-    fn deliver(&mut self, message: DkgMessage) -> crate::fsm::DeliveryStatus<DkgMessage> {
+    fn deliver(&mut self, message: DkgMessage) -> DeliveryStatus<DkgMessage> {
         match message {
             DkgMessage::ReconstructCommits(rc) => match self.dkg.process_reconstruct_commits(&rc) {
-                Ok(()) => crate::fsm::DeliveryStatus::Delivered,
-                Err(e) => crate::fsm::DeliveryStatus::Error(e),
+                Ok(()) => DeliveryStatus::Delivered,
+                Err(e) => DeliveryStatus::Error(e),
             },
-            m => crate::fsm::DeliveryStatus::Unexpected(m),
+            m => DeliveryStatus::Unexpected(m),
         }
     }
 
-    fn advance(&self) -> Result<crate::fsm::Transition<DkgTypes>, anyhow::Error> {
+    fn advance(&self) -> Result<Transition<DkgTypes>, anyhow::Error> {
         match self.dkg.dist_key_share() {
             Ok(_) => Ok(Transition::Terminal(DkgTerminalStates::Completed {
                 dkg: self.dkg.clone(),

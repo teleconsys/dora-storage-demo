@@ -14,7 +14,7 @@ use kyber_rs::{
 };
 pub use messages::DkgMessage;
 
-use crate::fsm::StateMachineTypes;
+use crate::states::fsm::StateMachineTypes;
 
 pub struct DkgTypes {}
 
