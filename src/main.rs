@@ -8,17 +8,7 @@ mod net;
 mod pkg;
 mod states;
 
-use std::{
-    fmt::Display,
-    io::{self, Read, Write},
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6, TcpListener, TcpStream},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        mpsc::{Receiver, Sender},
-        Arc,
-    },
-    time::Duration,
-};
+use std::net::Ipv4Addr;
 
 use actix_web::{App, HttpServer};
 use anyhow::Result;
@@ -28,8 +18,7 @@ use api::routes::StoreData;
 use clap::Parser;
 use demo::run::{run_node, NodeArgs};
 use kyber_rs::{group::edwards25519::SuiteEd25519, util::key::new_key_pair};
-use net::host::Host;
-use serde::{de::DeserializeOwned, Serialize};
+
 use states::dkg;
 
 #[derive(Parser)]
@@ -59,7 +48,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_api(args: ApiArgs) -> Result<()> {
+fn run_api(_args: ApiArgs) -> Result<()> {
     let sr = actix_web::rt::System::new();
     sr.block_on(
         HttpServer::new(|| {

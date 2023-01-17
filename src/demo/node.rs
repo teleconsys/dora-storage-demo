@@ -63,7 +63,7 @@ impl Node {
 
     pub fn run(
         self,
-        message: Vec<u8>,
+        _message: Vec<u8>,
         num_participants: usize,
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let dkg_initial_state = Initializing::new(self.keypair.clone(), num_participants);
@@ -103,7 +103,7 @@ impl Node {
         document.publish(&signature.to_vec())?;
         log::info!("Committee's DID has been published, DID URL: {}", did_url);
 
-        let resolved_did = resolve_document(did_url)?;
+        let _resolved_did = resolve_document(did_url)?;
 
         Ok((signature, dist_pub_key))
     }

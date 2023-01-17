@@ -10,7 +10,7 @@ pub struct StoreData {
 
 #[post("/store")]
 pub async fn store(
-    req_body: web::Json<StoreRequest>,
+    _req_body: web::Json<StoreRequest>,
     data: web::Data<StoreData>,
 ) -> Result<String, StoreError> {
     let response = serde_json::to_string(&StoreResponse {
