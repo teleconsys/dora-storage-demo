@@ -1,4 +1,5 @@
 use identity_iota::{core::ToJson, prelude::IotaDocument};
+use kyber_rs::{encoding::BinaryUnmarshaler, group::edwards25519::Point};
 
 use crate::dlt::iota::{create_unsigned_did, publish_did, resolve_did};
 use anyhow::Result;
@@ -14,14 +15,25 @@ pub fn new_document(
     public_key_bytes: &[u8],
     network: &str,
     time_resolution: Option<u32>,
+    committee_nodes_dids: Option<Vec<String>>,
 ) -> Result<Document> {
     let document: Document = match network {
         "iota-main" => Document::IotaDocument {
-            document: create_unsigned_did(public_key_bytes, "main".to_string(), time_resolution)?,
+            document: create_unsigned_did(
+                public_key_bytes,
+                "main".to_string(),
+                time_resolution,
+                committee_nodes_dids,
+            )?,
             network: "main".to_string(),
         },
         "iota-dev" => Document::IotaDocument {
-            document: create_unsigned_did(public_key_bytes, "dev".to_string(), time_resolution)?,
+            document: create_unsigned_did(
+                public_key_bytes,
+                "dev".to_string(),
+                time_resolution,
+                committee_nodes_dids,
+            )?,
             network: "dev".to_string(),
         },
         _ => panic!("{} network is not supported", network),
@@ -71,6 +83,21 @@ impl Document {
                 document,
                 network: _,
             } => Ok(document.to_jcs()?),
+        }
+    }
+
+    pub fn public_key(&self) -> Result<Point> {
+        match self {
+            Document::IotaDocument { document, .. } => {
+                let mut p = Point::default();
+                p.unmarshal_binary(
+                    &document.extract_signing_keys()[0]
+                        .expect("there is no public key")
+                        .data()
+                        .try_decode()?,
+                )?;
+                Ok(p)
+            }
         }
     }
 }

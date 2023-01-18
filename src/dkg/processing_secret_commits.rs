@@ -12,17 +12,20 @@ pub struct ProcessingSecretCommits {
     dkg: DistKeyGenerator<SuiteEd25519>,
     secret_commits: SecretCommits<SuiteEd25519>,
     optional_complaints: Vec<Option<ComplaintCommits<SuiteEd25519>>>,
+    did_urls: Vec<String>,
 }
 
 impl ProcessingSecretCommits {
     pub fn new(
         dkg: DistKeyGenerator<SuiteEd25519>,
         secret_commits: SecretCommits<SuiteEd25519>,
+        did_urls: Vec<String>,
     ) -> ProcessingSecretCommits {
         ProcessingSecretCommits {
             dkg,
             secret_commits,
             optional_complaints: Vec::new(),
+            did_urls,
         }
     }
 }
@@ -69,6 +72,7 @@ impl State<DkgTypes> for ProcessingSecretCommits {
             let transition = Transition::Next(Box::new(ProcessingComplaints::new(
                 self.dkg.to_owned(),
                 self.optional_complaints.iter().flatten().cloned().collect(),
+                self.did_urls.clone(),
             )?));
             return Ok(transition);
         }

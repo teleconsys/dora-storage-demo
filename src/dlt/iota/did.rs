@@ -18,6 +18,7 @@ pub fn create_unsigned_did(
     bytes_pub_key: &[u8],
     network_name: String,
     time_resolution: Option<u32>,
+    committee_nodes_dids: Option<Vec<String>>,
 ) -> Result<IotaDocument> {
     let did = IotaDID::new_with_network(bytes_pub_key, network_name.clone())?;
 
@@ -65,6 +66,14 @@ pub fn create_unsigned_did(
         "serviceEndpoint": "iota://".to_owned() + address.as_str(),
     }))?;
     document.insert_service(service_address);
+
+    // insert committee's members did urls
+    if let Some(mut urls) = committee_nodes_dids {
+        urls.sort();
+        document
+            .properties_mut()
+            .insert("committeeMembers".into(), urls.into());
+    }
 
     // Set up proof field
     let proof: Proof = Proof::new_with_options(

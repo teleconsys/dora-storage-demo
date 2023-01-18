@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, EnumDisplay, Serialize, Deserialize)]
 pub enum DkgMessage {
     PublicKey(Point),
+    DIDUrl(String),
     Deal {
         destination: Point,
         #[serde(deserialize_with = "Deal::deserialize")]

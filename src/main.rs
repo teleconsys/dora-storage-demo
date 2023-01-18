@@ -15,9 +15,7 @@ mod store;
 use std::{
     fmt::Display,
     io::{self, Read, Write},
-    net::{
-        SocketAddr, TcpListener, TcpStream,
-    },
+    net::{SocketAddr, TcpListener, TcpStream},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
@@ -32,9 +30,7 @@ use anyhow::Result;
 use clap::Parser;
 use host::Host;
 use kyber_rs::{
-    encoding::BinaryMarshaler,
-    group::edwards25519::SuiteEd25519,
-    sign::eddsa::EdDSA,
+    encoding::BinaryMarshaler, group::edwards25519::SuiteEd25519, sign::eddsa::EdDSA,
     util::key::new_key_pair,
 };
 use node::Node;
@@ -237,16 +233,20 @@ fn main() -> Result<()> {
         args.host.port() as usize,
     );
 
+    let mut did_url = None;
     if let Some(network) = args.did_network.clone() {
         let eddsa = EdDSA::from(keypair);
-        let document = new_document(&eddsa.public.marshal_binary()?, &network, None)?;
+        let document = new_document(&eddsa.public.marshal_binary()?, &network, None, None)?;
         let signature = eddsa.sign(&document.to_bytes()?)?;
-        let did_url = document.did_url();
+        did_url = Some(document.did_url());
         document.publish(&signature)?;
-        log::info!("Node's DID has been published, DID URL: {}", did_url);
+        log::info!(
+            "Node's DID has been published, DID URL: {}",
+            did_url.clone().unwrap()
+        );
     }
 
-    let (_signature, _public_key) = node.run(storage, args.did_network, 3)?;
+    let (_signature, _public_key) = node.run(storage, args.did_network, did_url, 3)?;
 
     is_completed.store(true, Ordering::SeqCst);
 

@@ -16,16 +16,19 @@ use super::DkgTypes;
 pub struct ProcessingJustifications {
     dkg: DistKeyGenerator<SuiteEd25519>,
     own_justifications: Vec<Justification<SuiteEd25519>>,
+    did_urls: Vec<String>,
 }
 
 impl ProcessingJustifications {
     pub fn new(
         dkg: DistKeyGenerator<SuiteEd25519>,
         own_justifications: Vec<Justification<SuiteEd25519>>,
+        did_urls: Vec<String>,
     ) -> ProcessingJustifications {
         ProcessingJustifications {
             dkg,
             own_justifications,
+            did_urls,
         }
     }
 }
@@ -58,6 +61,7 @@ impl State<DkgTypes> for ProcessingJustifications {
         Ok(Transition::Next(Box::new(ProcessingSecretCommits::new(
             dkg,
             secret_commits,
+            self.did_urls.clone(),
         ))))
     }
 }

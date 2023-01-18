@@ -18,17 +18,20 @@ pub struct ProcessingComplaints {
     dkg: DistKeyGenerator<SuiteEd25519>,
     complaints: Vec<ComplaintCommits<SuiteEd25519>>,
     reconstruct_commits: Vec<ReconstructCommits<SuiteEd25519>>,
+    did_urls: Vec<String>,
 }
 
 impl ProcessingComplaints {
     pub fn new(
         dkg: DistKeyGenerator<SuiteEd25519>,
         complaints: Vec<ComplaintCommits<SuiteEd25519>>,
+        did_urls: Vec<String>,
     ) -> Result<ProcessingComplaints> {
         Ok(ProcessingComplaints {
             dkg,
             complaints,
             reconstruct_commits: Vec::new(),
+            did_urls,
         })
     }
 }
@@ -66,7 +69,7 @@ impl State<DkgTypes> for ProcessingComplaints {
 
     fn advance(&self) -> Result<crate::fsm::Transition<DkgTypes>, anyhow::Error> {
         Ok(Transition::Next(Box::new(
-            ProcessingReconstructCommits::new(self.dkg.to_owned()),
+            ProcessingReconstructCommits::new(self.dkg.to_owned(), self.did_urls.clone()),
         )))
     }
 }

@@ -66,11 +66,12 @@ impl Node {
         self,
         storage: Storage,
         did_network: Option<String>,
+        did_url: Option<String>,
         num_participants: usize,
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
-        let dkg_initial_state = Initializing::new(self.keypair, num_participants);
+        let dkg_initial_state = Initializing::new(self.keypair, did_url, num_participants);
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
             Feed::new(self.dkg_input_channel, public.clone()),
@@ -79,15 +80,23 @@ impl Node {
             public.clone(),
         );
         let dkg_terminal_state = dkg_fsm.run()?;
-        let DkgTerminalStates::Completed { dkg } = dkg_terminal_state;
+        let DkgTerminalStates::Completed { dkg, did_urls } = dkg_terminal_state;
         let dist_pub_key = dkg.dist_key_share()?.public();
 
+        let mut nodes_dids = None;
         let mut network = "iota-dev".to_owned();
         if let Some(net) = did_network.clone() {
             network = net;
+            nodes_dids = Some(did_urls);
         }
+
         // Create unsigned DID
-        let document = new_document(&dist_pub_key.marshal_binary()?, &network, Some(20))?;
+        let document = new_document(
+            &dist_pub_key.marshal_binary()?,
+            &network,
+            Some(20),
+            nodes_dids,
+        )?;
 
         let sign_initial_state = sign::InitializingBuilder::try_from(dkg)?
             .with_message(document.to_bytes()?)
@@ -112,7 +121,8 @@ impl Node {
             document.publish(&signature.to_vec())?;
             log::info!("Committee's DID has been published, DID URL: {}", did_url);
 
-            let _resolved_did = resolve_document(did_url)?;
+            let resolved_did = resolve_document(did_url.clone())?;
+            storage.put(did_url, &resolved_did.to_bytes()?)?;
         }
 
         Ok((signature, dist_pub_key))
