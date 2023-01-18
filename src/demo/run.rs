@@ -48,7 +48,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
 
     let dkg_listen_relay =
         ListenRelay::new(args.port, dkg_input_channel_sender, is_completed.clone());
-    let dkg_broadcast_relay = BroadcastRelay::new(
+    let mut dkg_broadcast_relay = BroadcastRelay::new(
         dkg_input_channel_receiver,
         args.hosts.iter().map(Into::into).collect(),
     );
@@ -64,7 +64,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
         sign_input_channel_sender,
         is_completed.clone(),
     );
-    let sign_broadcast_relay = BroadcastRelay::new(
+    let mut sign_broadcast_relay = BroadcastRelay::new(
         sign_input_channel_receiver,
         args.hosts
             .into_iter()

@@ -1,11 +1,11 @@
-use anyhow::Result;
+use anyhow::{Error, Result};
 use std::{
-    fmt::Display,
+    fmt::{Debug, Display},
     io::{self, Read, Write},
+    marker::PhantomData,
     net::{Ipv6Addr, SocketAddr, SocketAddrV6, TcpListener, TcpStream},
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc::{Receiver, Sender},
         Arc,
     },
     time::Duration,
@@ -13,18 +13,22 @@ use std::{
 
 use serde::{de::DeserializeOwned, Serialize};
 
-pub struct ListenRelay<T> {
-    output: Sender<T>,
+use super::channel::{Receiver, Sender};
+
+pub struct ListenRelay<T, S: Sender<T>> {
+    output: S,
     port: u16,
     is_closed: Arc<AtomicBool>,
+    _phantom: PhantomData<T>,
 }
 
-impl<T: DeserializeOwned + Display> ListenRelay<T> {
-    pub fn new(port: u16, output: Sender<T>, is_closed: Arc<AtomicBool>) -> Self {
+impl<T: DeserializeOwned + Display, S: Sender<T>> ListenRelay<T, S> {
+    pub fn new(port: u16, output: S, is_closed: Arc<AtomicBool>) -> Self {
         Self {
             output,
             port,
             is_closed,
+            _phantom: PhantomData,
         }
     }
 
@@ -62,7 +66,7 @@ impl<T: DeserializeOwned + Display> ListenRelay<T> {
         let mut buf = vec![];
         stream.read_to_end(&mut buf)?;
         let message = serde_json::from_slice(&buf)?;
-        log::trace!("Message received: {}", &message);
+        log::trace!("Message received");
         let res = self.output.send(message);
         if let Err(e) = res {
             log::error!("Could not relay message: {}", e);
@@ -71,24 +75,33 @@ impl<T: DeserializeOwned + Display> ListenRelay<T> {
     }
 }
 
-pub struct BroadcastRelay<T> {
-    input: Receiver<T>,
+pub struct BroadcastRelay<T, R: Receiver<T>> {
+    input: R,
     destinations: Vec<SocketAddr>,
+    _phantom: PhantomData<T>,
 }
 
-impl<T: Serialize + Display> BroadcastRelay<T> {
-    pub fn new(input: Receiver<T>, destinations: Vec<SocketAddr>) -> Self {
+impl<T: Serialize, R: Receiver<T>> BroadcastRelay<T, R> {
+    pub fn new(input: R, destinations: Vec<SocketAddr>) -> Self {
         Self {
             input,
             destinations,
+            _phantom: PhantomData,
         }
     }
 
-    pub fn broadcast(&self) -> Result<()> {
+    pub fn broadcast(&mut self) -> Result<()> {
         std::thread::sleep(Duration::from_secs(3));
 
-        for message in &self.input {
-            log::info!("Relaying message: {}", message);
+        loop {
+            let message = self
+                .input
+                .recv()
+                .map_err(|e| Error::msg(format!("{:?}", e)))?;
+            log::info!(
+                "Relaying message: {:?}",
+                serde_json::to_string(&message).unwrap()
+            );
             let serialized = serde_json::to_string(&message)?;
 
             for destination in &self.destinations {
@@ -104,7 +117,5 @@ impl<T: Serialize + Display> BroadcastRelay<T> {
                 }
             }
         }
-
-        Ok(())
     }
 }

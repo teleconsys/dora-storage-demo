@@ -62,7 +62,7 @@ impl<T: Display + Serialize> Feed<T> {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MessageWrapper<T: Display + Serialize> {
     pub sender: Point,
     pub message: T,

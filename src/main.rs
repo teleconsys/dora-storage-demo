@@ -8,21 +8,29 @@ mod net;
 mod pkg;
 mod states;
 
-use std::net::Ipv4Addr;
+use std::{
+    net::Ipv4Addr,
+    sync::{atomic::AtomicBool, Arc},
+    thread,
+};
 
 use actix_web::{App, HttpServer};
 use anyhow::Result;
 
-use api::routes::StoreData;
+use api::routes::AppData;
 
 use clap::Parser;
 use demo::run::{run_node, NodeArgs};
-use kyber_rs::{group::edwards25519::SuiteEd25519, util::key::new_key_pair};
 
+use net::host::Host;
 use states::dkg;
 
 #[derive(Parser)]
-struct ApiArgs {}
+struct ApiArgs {
+    #[arg(required = true, value_name = "HOST:PORT")]
+    #[command()]
+    hosts: Vec<Host>,
+}
 
 #[derive(Parser)]
 struct Args {
@@ -48,21 +56,38 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_api(_args: ApiArgs) -> Result<()> {
+fn run_api(args: ApiArgs) -> Result<()> {
+    let is_finished = Arc::new(AtomicBool::new(false));
+
+    // let (inbound_sender, inbound_receiver) = std::sync::mpsc::channel();
+    let (inbound_sender, inbound_receiver) = tokio::sync::broadcast::channel(1024);
+    let (outbound_sender, outbound_receiver) = tokio::sync::broadcast::channel(1024);
+
+    let peers = args.hosts.into_iter().map(|h| h.into()).collect();
+
+    let mut broadcast = net::relay::BroadcastRelay::new(outbound_receiver, peers);
+    let listener = net::relay::ListenRelay::new(8000, inbound_sender.clone(), is_finished);
+
+    let h = thread::spawn(move || broadcast.broadcast().unwrap());
+
+    let is = Arc::new(inbound_sender);
+
     let sr = actix_web::rt::System::new();
     sr.block_on(
-        HttpServer::new(|| {
+        HttpServer::new(move || {
+            let app_data = actix_web::web::Data::new(AppData {
+                nodes_sender: outbound_sender.clone(),
+                nodes_receiver: is.subscribe(),
+            });
             App::new()
-                .service(api::routes::store)
-                .app_data(actix_web::web::Data::new(StoreData {
-                    dkg_initial_state: dkg::Initializing::new(
-                        new_key_pair(&SuiteEd25519::new_blake3_sha256_ed25519()).unwrap(),
-                        3,
-                    ),
-                }))
+                .service(api::routes::save::save)
+                .app_data(app_data)
         })
         .bind((Ipv4Addr::LOCALHOST, 8080))?
         .run(),
     )?;
+
+    h.join().unwrap();
+
     Ok(())
 }
