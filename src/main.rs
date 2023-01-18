@@ -15,37 +15,30 @@ mod store;
 use std::{
     fmt::Display,
     io::{self, Read, Write},
-    iter::repeat_with,
     net::{
-        IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpListener, TcpStream,
-        UdpSocket,
+        SocketAddr, TcpListener, TcpStream,
     },
-    str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
-        Arc, Condvar, Mutex,
+        Arc,
     },
-    thread::{self, JoinHandle},
+    thread,
     time::Duration,
 };
 
-use anyhow::{Error, Result};
+use anyhow::Result;
 
-use broadcast::LocalBroadcast;
-
-use clap::{Arg, Args, Parser};
+use clap::Parser;
 use host::Host;
 use kyber_rs::{
     encoding::BinaryMarshaler,
-    group::edwards25519::{Point, SuiteEd25519},
-    sign::eddsa::{self, EdDSA},
+    group::edwards25519::SuiteEd25519,
+    sign::eddsa::EdDSA,
     util::key::new_key_pair,
-    Random,
 };
 use node::Node;
 use serde::{de::DeserializeOwned, Serialize};
-use sign::Signature;
 
 use crate::{did::new_document, store::new_storage};
 
@@ -195,13 +188,7 @@ fn main() -> Result<()> {
     println!("Listening on port {}", args.host.port());
 
     let suite = SuiteEd25519::new_blake3_sha256_ed25519();
-    let eddsa = EdDSA::new(&mut suite.random_stream())?;
-
-    if let Some(network) = args.did_network.clone() {
-        let document = new_document(&eddsa.public.marshal_binary()?, &network, None)?;
-        let signature = eddsa.sign(&document.to_bytes()?)?;
-        document.publish(&signature)?;
-    }
+    let keypair = new_key_pair(&suite)?;
 
     let is_completed = Arc::new(AtomicBool::new(false));
 
@@ -242,7 +229,7 @@ fn main() -> Result<()> {
     let sign_broadcast_relay_handle = thread::spawn(move || sign_broadcast_relay.broadcast());
 
     let node = Node::new(
-        eddsa,
+        keypair.clone(),
         dkg_input_channel,
         dkg_output_channel,
         sign_input_channel,
@@ -250,7 +237,16 @@ fn main() -> Result<()> {
         args.host.port() as usize,
     );
 
-    let (signature, public_key) = node.run(storage, args.did_network, 3)?;
+    if let Some(network) = args.did_network.clone() {
+        let eddsa = EdDSA::from(keypair);
+        let document = new_document(&eddsa.public.marshal_binary()?, &network, None)?;
+        let signature = eddsa.sign(&document.to_bytes()?)?;
+        let did_url = document.did_url();
+        document.publish(&signature)?;
+        log::info!("Node's DID has been published, DID URL: {}", did_url);
+    }
+
+    let (_signature, _public_key) = node.run(storage, args.did_network, 3)?;
 
     is_completed.store(true, Ordering::SeqCst);
 

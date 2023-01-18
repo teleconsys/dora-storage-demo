@@ -1,7 +1,7 @@
 use std::{
     fmt::Display,
     io::{self, ErrorKind},
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
+    net::{SocketAddr, ToSocketAddrs},
     str::FromStr,
 };
 

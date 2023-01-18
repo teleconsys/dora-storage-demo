@@ -8,14 +8,12 @@ use crate::fsm::StateMachine;
 use crate::store::Storage;
 use anyhow::{Ok, Result};
 use kyber_rs::encoding::BinaryMarshaler;
-use kyber_rs::group::edwards25519::Curve;
-use kyber_rs::sign::eddsa::EdDSA;
 
 use crate::sign::{self, SignMessage, SignTerminalStates, Signature};
 use kyber_rs::{group::edwards25519::Point, util::key::Pair};
 
 pub struct Node {
-    keypair: EdDSA<Curve>,
+    keypair: Pair<Point>,
     dkg_input_channel: Receiver<MessageWrapper<DkgMessage>>,
     sign_input_channel: Receiver<MessageWrapper<SignMessage>>,
     dkg_output_channel: Sender<MessageWrapper<DkgMessage>>,
@@ -25,7 +23,7 @@ pub struct Node {
 
 impl Node {
     pub fn new(
-        keypair: EdDSA<Curve>,
+        keypair: Pair<Point>,
         dkg_input_channel: Receiver<MessageWrapper<DkgMessage>>,
         dkg_output_channel: Sender<MessageWrapper<DkgMessage>>,
         sign_input_channel: Receiver<MessageWrapper<SignMessage>>,
@@ -43,7 +41,7 @@ impl Node {
     }
 
     pub fn new_local(
-        keypair: EdDSA<Curve>,
+        keypair: Pair<Point>,
         index: usize,
         dkg_broadcast: &mut LocalBroadcast<MessageWrapper<DkgMessage>>,
         sign_broadcast: &mut LocalBroadcast<MessageWrapper<SignMessage>>,
@@ -70,7 +68,7 @@ impl Node {
         did_network: Option<String>,
         num_participants: usize,
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
-        let secret = self.keypair.secret.clone();
+        let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
         let dkg_initial_state = Initializing::new(self.keypair, num_participants);
         let mut dkg_fsm = StateMachine::new(
@@ -108,13 +106,13 @@ impl Node {
 
         let SignTerminalStates::Completed(signature) = sign_terminal_state;
 
-        if let Some(_) = did_network {
+        if did_network.is_some() {
             // Publish signed DID
             let did_url = document.did_url();
             document.publish(&signature.to_vec())?;
             log::info!("Committee's DID has been published, DID URL: {}", did_url);
 
-            let resolved_did = resolve_document(did_url)?;
+            let _resolved_did = resolve_document(did_url)?;
         }
 
         Ok((signature, dist_pub_key))
