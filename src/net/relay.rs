@@ -13,34 +13,41 @@ use std::{
 
 use serde::{de::DeserializeOwned, Serialize};
 
-use super::channel::{Receiver, Sender};
+use super::{
+    channel::{Receiver, Sender},
+    host::Host,
+};
 
 pub struct ListenRelay<T, S: Sender<T>> {
     output: S,
-    port: u16,
+    host: Host,
     is_closed: Arc<AtomicBool>,
-    _phantom: PhantomData<T>,
+    _phantom_data: PhantomData<T>,
 }
 
 impl<T: DeserializeOwned + Display, S: Sender<T>> ListenRelay<T, S> {
-    pub fn new(port: u16, output: S, is_closed: Arc<AtomicBool>) -> Self {
+    pub fn new(host: Host, output: S, is_closed: Arc<AtomicBool>) -> Self {
         Self {
             output,
-            port,
+            host,
             is_closed,
-            _phantom: PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 
     pub fn listen(&self) -> Result<()> {
-        let listener =
-            match TcpListener::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, self.port, 0, 0)) {
-                Ok(v) => v,
-                Err(e) => {
-                    log::error!("Could not listen on port {}: {}", self.port, e);
-                    return Err(e.into());
-                }
-            };
+        let listener = match TcpListener::bind(SocketAddrV6::new(
+            Ipv6Addr::LOCALHOST,
+            self.host.port(),
+            0,
+            0,
+        )) {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("Could not listen on port {}: {}", self.host.port(), e);
+                return Err(e.into());
+            }
+        };
 
         log::info!("Listeninig at {}", listener.local_addr()?);
         listener.set_nonblocking(true)?;

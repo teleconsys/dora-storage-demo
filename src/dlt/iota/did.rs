@@ -1,11 +1,11 @@
 use anyhow::Result;
 use identity_iota::{
-    client::{ClientBuilder, DIDMessageEncoding, TangleResolve},
+    client::TangleResolve,
     core::{BaseEncoding, FromJson, Timestamp},
     crypto::{GetSignatureMut, Proof, ProofOptions, ProofValue, PublicKey, SetSignature},
     did::{Service, DID},
-    iota_core::{IotaDID, IotaService, IotaVerificationMethod, Network},
-    prelude::{Client, IotaDocument, KeyType},
+    iota_core::{IotaDID, IotaService, IotaVerificationMethod},
+    prelude::{IotaDocument, KeyType},
 };
 use iota_client::{
     bee_message::prelude::{Address, Ed25519Address},
@@ -14,10 +14,13 @@ use iota_client::{
 use serde_json::json;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
+use super::client::identity_client;
+
 pub fn create_unsigned_did(
     bytes_pub_key: &[u8],
     network_name: String,
     time_resolution: Option<u32>,
+    committee_nodes_dids: Option<Vec<String>>,
 ) -> Result<IotaDocument> {
     let did = IotaDID::new_with_network(bytes_pub_key, network_name.clone())?;
 
@@ -62,9 +65,17 @@ pub fn create_unsigned_did(
     let service_address: IotaService = Service::from_json_value(json!({
         "id": document.id().to_url().join("#iota-address-0")?,
         "type": "IotaAddress",
-        "serviceEndpoint": "iota://".to_owned() + &address,
+        "serviceEndpoint": "iota://".to_owned() + address.as_str(),
     }))?;
     document.insert_service(service_address);
+
+    // insert committee's members did urls
+    if let Some(mut urls) = committee_nodes_dids {
+        urls.sort();
+        document
+            .properties_mut()
+            .insert("committeeMembers".into(), urls.into());
+    }
 
     // Set up proof field
     let proof: Proof = Proof::new_with_options(
@@ -92,7 +103,7 @@ pub fn publish_did(
     // Verify signature
     document.verify_document(document)?;
 
-    let client = client(network_name)?;
+    let client = identity_client(&network_name)?;
     let r = tokio::runtime::Runtime::new()?;
     r.block_on(client.publish_document(document))?;
 
@@ -101,29 +112,10 @@ pub fn publish_did(
 
 pub fn resolve_did(did_url: String) -> Result<IotaDocument> {
     let iota_did = IotaDID::parse(did_url)?;
-    let client = client(iota_did.network_str().to_owned())?;
+    let client = identity_client(iota_did.network_str())?;
     let r = tokio::runtime::Runtime::new()?;
     let resolved_doc = r.block_on(client.resolve(&iota_did))?;
 
     Ok(resolved_doc.document)
 }
 
-fn client(network_name: String) -> Result<Client> {
-    let network = Network::try_from_name(network_name.clone())?;
-
-    // Select primary node
-    let primary_node = match network_name.as_str() {
-        "main" => "https://chrysalis-nodes.iota.cafe",
-        "dev" => "https://api.lb-0.h.chrysalis-devnet.iota.cafe",
-        _ => todo!(),
-    };
-
-    // Setup client
-    let client_builder = ClientBuilder::new()
-        .network(network)
-        .encoding(DIDMessageEncoding::Json)
-        .primary_node(primary_node, None, None)?;
-
-    let r = tokio::runtime::Runtime::new()?;
-    Ok(r.block_on(client_builder.build())?)
-}

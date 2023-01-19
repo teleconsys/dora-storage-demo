@@ -14,17 +14,20 @@ pub struct ProcessingResponses {
     dkg: DistKeyGenerator<SuiteEd25519>,
     responses_for_other_nodes: Vec<Response>,
     optional_justifications: Vec<Option<Justification<SuiteEd25519>>>,
+    did_urls: Vec<String>,
 }
 
 impl ProcessingResponses {
     pub fn new(
         dkg: DistKeyGenerator<SuiteEd25519>,
         responses: Vec<Response>,
+        did_urls: Vec<String>,
     ) -> ProcessingResponses {
         ProcessingResponses {
             dkg,
             responses_for_other_nodes: responses,
             optional_justifications: Vec::new(),
+            did_urls,
         }
     }
 }
@@ -79,6 +82,7 @@ impl State<DkgTypes> for ProcessingResponses {
                     .flatten()
                     .cloned()
                     .collect(),
+                self.did_urls.clone(),
             ))));
         }
         Ok(Transition::Same)

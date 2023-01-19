@@ -13,15 +13,20 @@ pub struct ProcessingDeals {
     deals: HashMap<usize, Deal<Point>>,
     dkg: DistKeyGenerator<SuiteEd25519>,
     responses: Vec<Response>,
+    did_urls: Vec<String>,
 }
 
 impl ProcessingDeals {
-    pub fn new(mut dkg: DistKeyGenerator<SuiteEd25519>) -> Result<ProcessingDeals> {
+    pub fn new(
+        mut dkg: DistKeyGenerator<SuiteEd25519>,
+        did_urls: Vec<String>,
+    ) -> Result<ProcessingDeals> {
         let deals = dkg.deals()?;
         Ok(ProcessingDeals {
             deals,
             dkg,
             responses: Vec::new(),
+            did_urls,
         })
     }
 }
@@ -64,9 +69,13 @@ impl State<DkgTypes> for ProcessingDeals {
 
     fn advance(&self) -> Result<Transition<DkgTypes>, Error> {
         match self.responses.len() {
-            n if n == self.dkg.participants.len() - 1 => Ok(Transition::Next(Box::new(
-                ProcessingResponses::new(self.dkg.to_owned(), self.responses.to_owned()),
-            ))),
+            n if n == self.dkg.participants.len() - 1 => {
+                Ok(Transition::Next(Box::new(ProcessingResponses::new(
+                    self.dkg.to_owned(),
+                    self.responses.to_owned(),
+                    self.did_urls.clone(),
+                ))))
+            }
             _ => Ok(Transition::Same),
         }
     }

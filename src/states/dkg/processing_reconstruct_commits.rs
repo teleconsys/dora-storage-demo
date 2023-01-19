@@ -12,13 +12,18 @@ use super::{DkgMessage, DkgTerminalStates, DkgTypes};
 pub struct ProcessingReconstructCommits {
     dkg: DistKeyGenerator<SuiteEd25519>,
     reconstruct_commits: Vec<ReconstructCommits<SuiteEd25519>>,
+    did_urls: Vec<String>,
 }
 
 impl ProcessingReconstructCommits {
-    pub fn new(dkg: DistKeyGenerator<SuiteEd25519>) -> ProcessingReconstructCommits {
+    pub fn new(
+        dkg: DistKeyGenerator<SuiteEd25519>,
+        did_urls: Vec<String>,
+    ) -> ProcessingReconstructCommits {
         ProcessingReconstructCommits {
             dkg,
             reconstruct_commits: Vec::new(),
+            did_urls,
         }
     }
 }
@@ -55,6 +60,7 @@ impl State<DkgTypes> for ProcessingReconstructCommits {
         match self.dkg.dist_key_share() {
             Ok(_) => Ok(Transition::Terminal(DkgTerminalStates::Completed {
                 dkg: self.dkg.clone(),
+                did_urls: self.did_urls.clone(),
             })),
             Err(_) => Ok(Transition::Same),
         }

@@ -1,0 +1,109 @@
+version: '3'
+
+services:
+  minio-1:
+    container_name: m1
+    image: minio/minio
+    stop_grace_period: 5m
+    ports:
+      - 9001:9001
+    volumes:
+      - minio_storage_1:/data
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+    command: server --console-address ":9001" /data
+
+  minio-2:
+    container_name: m2
+    image: minio/minio
+    stop_grace_period: 5m
+    ports:
+      - 9002:9001
+    volumes:
+      - minio_storage_2:/data
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+    command: server --console-address ":9001" /data
+
+  minio-3:
+    container_name: m3
+    image: minio/minio
+    stop_grace_period: 5m
+    ports:
+      - 9003:9001
+    volumes:
+      - minio_storage_3:/data
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+    command: server --console-address ":9001" /data
+
+
+  dora-storage-1:
+    container_name: d1
+    image: giordyfish/test-dora-storage
+    stop_grace_period: 5m
+    restart: always
+    environment:
+      - RUST_LOG=fsm=trace,dora=trace
+    depends_on:
+      minio-1:
+        condition: service_started
+    command:
+      - "--storage=minio-local"
+      - "--storage-endpoint=minio-1:9000"
+      - "--storage-access-key=admin"
+      - "--storage-secret-key=password"
+      - "dora-storage-2:9000"
+      - "dora-storage-3:9000"
+      - "-h=dora-storage-1:9000"
+      - "--did-network=iota-main"
+
+  dora-storage-2:
+    container_name: d2
+    image: giordyfish/test-dora-storage
+    stop_grace_period: 5m
+    restart: always
+    environment:
+      - RUST_LOG=fsm=trace,dora=trace
+    depends_on:
+      minio-2:
+        condition: service_started
+    command:
+      - "--storage=minio-local"
+      - "--storage-endpoint=minio-2:9000"
+      - "--storage-access-key=admin"
+      - "--storage-secret-key=password"
+      - "dora-storage-1:9000"
+      - "dora-storage-3:9000"
+      - "-h=dora-storage-2:9000"
+      - "--did-network=iota-main"
+
+  dora-storage-3:
+    container_name: d3
+    image: giordyfish/test-dora-storage
+    stop_grace_period: 5m
+    restart: always
+    environment:
+      - RUST_LOG=fsm=trace,dora=trace
+    depends_on:
+      minio-3:
+        condition: service_started
+    command:
+      - "--storage=minio-local"
+      - "--storage-endpoint=minio-3:9000"
+      - "--storage-access-key=admin"
+      - "--storage-secret-key=password"
+      - "dora-storage-1:9000"
+      - "dora-storage-2:9000"
+      - "-h=dora-storage-3:9000"
+      - "--did-network=iota-main"
+
+
+#### minio volumes
+volumes:
+  minio_storage_1: {} 
+  minio_storage_2: {}
+  minio_storage_3: {}  

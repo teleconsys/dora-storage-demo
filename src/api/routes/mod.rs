@@ -8,7 +8,6 @@ use tokio::sync::broadcast::{Receiver, Sender};
 
 pub mod delete;
 pub mod get;
-pub mod proof;
 pub mod save;
 
 pub struct AppData {

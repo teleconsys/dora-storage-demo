@@ -7,14 +7,19 @@ use kyber_rs::{
     util::key::Pair,
 };
 
-use crate::states::fsm::{DeliveryStatus, State, Transition};
+use crate::{
+    did::resolve_document,
+    states::fsm::{DeliveryStatus, State, Transition},
+};
 
 use super::{processing_deals::ProcessingDeals, DkgMessage, DkgTypes};
 
 pub struct Initializing {
     key: Pair<Point>,
+    did_url: Option<String>,
     num_participants: usize,
     public_keys: Vec<Point>,
+    did_urls: Vec<String>,
 }
 
 impl Display for Initializing {
@@ -24,26 +29,43 @@ impl Display for Initializing {
 }
 
 impl Initializing {
-    pub fn new(key: Pair<Point>, num_participants: usize) -> Initializing {
+    pub fn new(key: Pair<Point>, did_url: Option<String>, num_participants: usize) -> Initializing {
         let mut public_keys = Vec::with_capacity(num_participants);
         public_keys.push(key.public.clone());
+        let mut did_urls = Vec::with_capacity(num_participants);
+        if let Some(url) = did_url.clone() {
+            did_urls.push(url)
+        };
         Self {
             key,
+            did_url,
             num_participants,
             public_keys,
+            did_urls,
         }
     }
 }
 
 impl State<DkgTypes> for Initializing {
     fn initialize(&self) -> Vec<DkgMessage> {
-        vec![DkgMessage::PublicKey(self.key.public.clone())]
+        match &self.did_url {
+            Some(url) => vec![DkgMessage::DIDUrl(url.to_string())],
+            None => vec![DkgMessage::PublicKey(self.key.public.clone())],
+        }
     }
 
     fn deliver(&mut self, message: DkgMessage) -> DeliveryStatus<DkgMessage> {
         match message {
             DkgMessage::PublicKey(k) => {
-                self.public_keys.push(k);
+                if self.did_url.is_none() {
+                    self.public_keys.push(k);
+                }
+                DeliveryStatus::Delivered
+            }
+            DkgMessage::DIDUrl(did_url) => {
+                self.did_urls.push(did_url.clone());
+                self.public_keys
+                    .push(resolve_document(did_url).unwrap().public_key().unwrap());
                 DeliveryStatus::Delivered
             }
             m => DeliveryStatus::Unexpected(m),
@@ -51,19 +73,23 @@ impl State<DkgTypes> for Initializing {
     }
 
     fn advance(&self) -> Result<Transition<DkgTypes>, Error> {
-        match self.public_keys.len() {
-            n if n == self.num_participants => {
-                let mut public_keys = self.public_keys.clone();
-                public_keys.sort_by_key(|pk| pk.to_string());
-                let dkg = new_dist_key_generator(
-                    &SuiteEd25519::new_blake3_sha256_ed25519(),
-                    &self.key.private,
-                    &public_keys,
-                    self.num_participants / 2 + 1,
-                )?;
-                Ok(Transition::Next(Box::new(ProcessingDeals::new(dkg)?)))
-            }
-            _ => Ok(Transition::Same),
+        if self.public_keys.len() == self.num_participants
+            || self.did_urls.len() == self.num_participants
+        {
+            let mut public_keys = self.public_keys.clone();
+            public_keys.sort_by_key(|pk| pk.to_string());
+            let dkg = new_dist_key_generator(
+                &SuiteEd25519::new_blake3_sha256_ed25519(),
+                &self.key.private,
+                &public_keys,
+                self.num_participants / 2 + 1,
+            )?;
+            Ok(Transition::Next(Box::new(ProcessingDeals::new(
+                dkg,
+                self.did_urls.clone(),
+            )?)))
+        } else {
+            Ok(Transition::Same)
         }
     }
 }

@@ -4,12 +4,13 @@ extern crate pretty_env_logger;
 mod api;
 mod demo;
 mod did;
+mod dlt;
 mod net;
-mod pkg;
 mod states;
+mod store;
 
 use std::{
-    net::Ipv4Addr,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::{atomic::AtomicBool, Arc, Mutex},
     thread,
 };
@@ -68,7 +69,11 @@ fn run_api(args: ApiArgs) -> Result<()> {
     let peers = args.hosts.into_iter().map(|h| h.into()).collect();
 
     let mut broadcast = net::relay::BroadcastRelay::new(outbound_receiver, peers);
-    let listener = net::relay::ListenRelay::new(args.port, inbound_sender.clone(), is_finished);
+    let listener = net::relay::ListenRelay::new(
+        Host::from(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), args.port)),
+        inbound_sender.clone(),
+        is_finished,
+    );
 
     let broadcast_handler = thread::spawn(move || broadcast.broadcast().unwrap());
     let listener_handler = thread::spawn(move || listener.listen().unwrap());

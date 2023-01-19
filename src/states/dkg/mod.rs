@@ -24,7 +24,10 @@ impl StateMachineTypes for DkgTypes {
 }
 
 pub enum DkgTerminalStates {
-    Completed { dkg: DistKeyGenerator<SuiteEd25519> },
+    Completed {
+        dkg: DistKeyGenerator<SuiteEd25519>,
+        did_urls: Vec<String>,
+    },
 }
 
 pub type DistPublicKey = Point;
