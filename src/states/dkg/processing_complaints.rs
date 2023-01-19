@@ -6,9 +6,9 @@ use kyber_rs::share::dkg::rabin::ComplaintCommits;
 use kyber_rs::share::dkg::rabin::DistKeyGenerator;
 use kyber_rs::share::dkg::rabin::ReconstructCommits;
 
-use crate::fsm::DeliveryStatus;
-use crate::fsm::State;
-use crate::fsm::Transition;
+use crate::states::fsm::DeliveryStatus;
+use crate::states::fsm::State;
+use crate::states::fsm::Transition;
 
 use super::processing_reconstruct_commits::ProcessingReconstructCommits;
 use super::DkgMessage;
@@ -51,7 +51,7 @@ impl State<DkgTypes> for ProcessingComplaints {
             .collect()
     }
 
-    fn deliver(&mut self, message: DkgMessage) -> crate::fsm::DeliveryStatus<DkgMessage> {
+    fn deliver(&mut self, message: DkgMessage) -> DeliveryStatus<DkgMessage> {
         match message {
             DkgMessage::ComplaintCommits(c) => match self.dkg.process_complaint_commits(&c) {
                 Ok(reconstruct_commits) => {
@@ -60,11 +60,11 @@ impl State<DkgTypes> for ProcessingComplaints {
                 }
                 Err(e) => DeliveryStatus::Error(e),
             },
-            m => crate::fsm::DeliveryStatus::Unexpected(m),
+            m => DeliveryStatus::Unexpected(m),
         }
     }
 
-    fn advance(&self) -> Result<crate::fsm::Transition<DkgTypes>, anyhow::Error> {
+    fn advance(&self) -> Result<Transition<DkgTypes>, anyhow::Error> {
         Ok(Transition::Next(Box::new(
             ProcessingReconstructCommits::new(self.dkg.to_owned()),
         )))

@@ -5,7 +5,7 @@ use colored::Colorize;
 use kyber_rs::group::edwards25519::Point;
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::feed::{Feed, MessageWrapper};
+use crate::states::feed::{Feed, MessageWrapper};
 
 pub type BoxedState<T> = Box<dyn State<T>>;
 
