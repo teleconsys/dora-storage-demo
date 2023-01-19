@@ -10,7 +10,7 @@ mod states;
 
 use std::{
     net::Ipv4Addr,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{atomic::AtomicBool, Arc, Mutex},
     thread,
 };
 
@@ -27,9 +27,11 @@ use states::dkg;
 
 #[derive(Parser)]
 struct ApiArgs {
-    #[arg(required = true, value_name = "HOST:PORT")]
-    #[command()]
+    #[arg(required = true, value_name = "HOST:PORT", help = "nodes in committee")]
     hosts: Vec<Host>,
+
+    #[arg(required = true, help = "inbound port")]
+    port: u16,
 }
 
 #[derive(Parser)]
@@ -60,15 +62,16 @@ fn run_api(args: ApiArgs) -> Result<()> {
     let is_finished = Arc::new(AtomicBool::new(false));
 
     // let (inbound_sender, inbound_receiver) = std::sync::mpsc::channel();
-    let (inbound_sender, inbound_receiver) = tokio::sync::broadcast::channel(1024);
+    let (inbound_sender, _) = tokio::sync::broadcast::channel(1024);
     let (outbound_sender, outbound_receiver) = tokio::sync::broadcast::channel(1024);
 
     let peers = args.hosts.into_iter().map(|h| h.into()).collect();
 
     let mut broadcast = net::relay::BroadcastRelay::new(outbound_receiver, peers);
-    let listener = net::relay::ListenRelay::new(8000, inbound_sender.clone(), is_finished);
+    let listener = net::relay::ListenRelay::new(args.port, inbound_sender.clone(), is_finished);
 
-    let h = thread::spawn(move || broadcast.broadcast().unwrap());
+    let broadcast_handler = thread::spawn(move || broadcast.broadcast().unwrap());
+    let listener_handler = thread::spawn(move || listener.listen().unwrap());
 
     let is = Arc::new(inbound_sender);
 
@@ -77,7 +80,7 @@ fn run_api(args: ApiArgs) -> Result<()> {
         HttpServer::new(move || {
             let app_data = actix_web::web::Data::new(AppData {
                 nodes_sender: outbound_sender.clone(),
-                nodes_receiver: is.subscribe(),
+                nodes_receiver: Mutex::new(is.subscribe()),
             });
             App::new()
                 .service(api::routes::save::save)
@@ -87,7 +90,8 @@ fn run_api(args: ApiArgs) -> Result<()> {
         .run(),
     )?;
 
-    h.join().unwrap();
+    broadcast_handler.join().unwrap();
+    listener_handler.join().unwrap();
 
     Ok(())
 }
