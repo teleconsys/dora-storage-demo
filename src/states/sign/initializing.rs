@@ -9,7 +9,7 @@ use kyber_rs::{
     sign::dss::{new_dss, PartialSig, DSS},
 };
 
-use crate::fsm::{DeliveryStatus, State, Transition};
+use crate::states::fsm::{DeliveryStatus, State, Transition};
 
 use super::{messages::SignMessage, SignTerminalStates, SignTypes, Signature};
 
@@ -122,7 +122,7 @@ impl State<SignTypes> for Initializing {
         )]
     }
 
-    fn deliver(&mut self, message: SignMessage) -> crate::fsm::DeliveryStatus<SignMessage> {
+    fn deliver(&mut self, message: SignMessage) -> DeliveryStatus<SignMessage> {
         match message {
             SignMessage::PartialSignature(ps) => match self.dss.process_partial_sig(ps) {
                 Ok(()) => DeliveryStatus::Delivered,
@@ -131,7 +131,7 @@ impl State<SignTypes> for Initializing {
         }
     }
 
-    fn advance(&self) -> Result<crate::fsm::Transition<SignTypes>, anyhow::Error> {
+    fn advance(&self) -> Result<Transition<SignTypes>, anyhow::Error> {
         if self.dss.enough_partial_sig() {
             let signature = self.dss.signature()?;
             return Ok(Transition::Terminal(SignTerminalStates::Completed(

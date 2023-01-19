@@ -1,8 +1,9 @@
 use identity_iota::{core::ToJson, prelude::IotaDocument};
 use kyber_rs::{encoding::BinaryUnmarshaler, group::edwards25519::Point};
 
-use crate::dlt::iota::{create_unsigned_did, publish_did, resolve_did};
 use anyhow::Result;
+
+use crate::dlt::iota::{create_unsigned_did, publish_did, resolve_did};
 
 pub enum Document {
     IotaDocument {

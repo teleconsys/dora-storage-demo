@@ -5,9 +5,9 @@ use kyber_rs::group::edwards25519::SuiteEd25519;
 use kyber_rs::share::dkg::rabin::DistKeyGenerator;
 use kyber_rs::share::dkg::rabin::Justification;
 
-use crate::fsm::DeliveryStatus;
-use crate::fsm::State;
-use crate::fsm::Transition;
+use crate::states::fsm::DeliveryStatus;
+use crate::states::fsm::State;
+use crate::states::fsm::Transition;
 
 use super::processing_secret_commits::ProcessingSecretCommits;
 use super::DkgMessage;

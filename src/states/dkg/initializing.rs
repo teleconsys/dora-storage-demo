@@ -9,7 +9,7 @@ use kyber_rs::{
 
 use crate::{
     did::resolve_document,
-    fsm::{DeliveryStatus, State, Transition},
+    states::fsm::{DeliveryStatus, State, Transition},
 };
 
 use super::{processing_deals::ProcessingDeals, DkgMessage, DkgTypes};

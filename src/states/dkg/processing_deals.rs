@@ -5,7 +5,7 @@ use kyber_rs::{
 };
 use std::{collections::HashMap, fmt::Display};
 
-use crate::fsm::{DeliveryStatus, State, Transition};
+use crate::states::fsm::{DeliveryStatus, State, Transition};
 
 use super::{processing_responses::ProcessingResponses, DkgMessage, DkgTypes};
 
