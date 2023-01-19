@@ -6,8 +6,6 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast::error::{RecvError, SendError};
 use tokio::sync::broadcast::{Receiver, Sender};
 
-use self::save::StoreError;
-
 pub mod delete;
 pub mod get;
 pub mod proof;
