@@ -1,4 +1,4 @@
-use std::fmt::{Display, Pointer};
+use std::fmt::{Display};
 
 pub trait Sender<T> {
     fn send(&self, t: T) -> Result<(), SendError<T>>;

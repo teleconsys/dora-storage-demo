@@ -59,7 +59,7 @@ impl Listener {
         loop {
             rx.recv()?;
         }
-    } 
+    }
 }
 
 pub struct Publisher(Client);
@@ -70,17 +70,13 @@ pub fn new_publisher(network: &str) -> Result<Publisher> {
 
 impl Publisher {
     pub async fn publish(&self, data: &[u8], index: Option<String>) -> Result<String> {
+        // Build message with optional index
+        let client_message_builder = match index {
+            Some(idx) => self.0.message().with_data(data.to_vec()).with_index(idx),
+            None => self.0.message().with_data(data.to_vec()),
+        };
+        let response = client_message_builder.finish().await?;
 
-    // Build message with optional index
-    let client_message_builder = match index {
-        Some(idx) => self.0
-            .message()
-            .with_data(data.to_vec())
-            .with_index(idx),
-        None => self.0.message().with_data(data.to_vec()),
-    };
-    let response = client_message_builder.finish().await?;
-
-    Ok(response.id().0.to_string())
+        Ok(response.id().0.to_string())
     }
 }

@@ -10,7 +10,7 @@ mod states;
 mod store;
 
 use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::SocketAddr,
     sync::{atomic::AtomicBool, Arc, Mutex},
     thread,
 };
@@ -29,10 +29,11 @@ use states::dkg;
 #[derive(Parser)]
 struct ApiArgs {
     #[arg(required = true, value_name = "HOST:PORT", help = "nodes in committee")]
-    hosts: Vec<Host>,
+    #[command()]
+    nodes: Vec<Host>,
 
-    #[arg(required = true, help = "inbound port")]
-    port: u16,
+    #[arg(required = true, long, help = "inbound host")]
+    host: Host,
 }
 
 #[derive(Parser)]
@@ -66,14 +67,10 @@ fn run_api(args: ApiArgs) -> Result<()> {
     let (inbound_sender, _) = tokio::sync::broadcast::channel(1024);
     let (outbound_sender, outbound_receiver) = tokio::sync::broadcast::channel(1024);
 
-    let peers = args.hosts.into_iter().map(|h| h.into()).collect();
+    let peers = args.nodes.into_iter().map(|h| h.into()).collect();
 
     let mut broadcast = net::relay::BroadcastRelay::new(outbound_receiver, peers);
-    let listener = net::relay::ListenRelay::new(
-        Host::from(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), args.port)),
-        inbound_sender.clone(),
-        is_finished,
-    );
+    let listener = net::relay::ListenRelay::new(args.host.clone(), inbound_sender.clone(), is_finished);
 
     let broadcast_handler = thread::spawn(move || broadcast.broadcast().unwrap());
     let listener_handler = thread::spawn(move || listener.listen().unwrap());
@@ -91,7 +88,7 @@ fn run_api(args: ApiArgs) -> Result<()> {
                 .service(api::routes::save::save)
                 .app_data(app_data)
         })
-        .bind((Ipv4Addr::LOCALHOST, 8080))?
+        .bind(SocketAddr::from(args.host.with_port(8080)))?
         .run(),
     )?;
 

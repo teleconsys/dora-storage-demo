@@ -36,12 +36,7 @@ impl<T: DeserializeOwned + Display, S: Sender<T>> ListenRelay<T, S> {
     }
 
     pub fn listen(&self) -> Result<()> {
-        let listener = match TcpListener::bind(SocketAddrV6::new(
-            Ipv6Addr::LOCALHOST,
-            self.host.port(),
-            0,
-            0,
-        )) {
+        let listener = match TcpListener::bind(SocketAddr::from(self.host.clone())) {
             Ok(v) => v,
             Err(e) => {
                 log::error!("Could not listen on port {}: {}", self.host.port(), e);

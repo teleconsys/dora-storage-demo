@@ -32,11 +32,11 @@ pub struct NodeArgs {
     #[command()]
     peers: Vec<Host>,
 
-    #[arg(required = true, short, long)]
+    #[arg(required = true, long)]
     host: Host,
 
-    #[arg(required = true, short, long)]
-    storage: String,
+    #[arg(short, long, default_value = None)]
+    storage: Option<String>,
 
     #[arg(long = "storage-endpoint", default_value = None)]
     storage_endpoint: Option<String>,
@@ -52,18 +52,22 @@ pub struct NodeArgs {
 }
 
 pub fn run_node(args: NodeArgs) -> Result<()> {
-    println!("Setting up storage... ");
-    let storage = new_storage(
-        &args.storage,
-        args.storage_access_key,
-        args.storage_secret_key,
-        args.storage_endpoint,
-    )?;
-    println!("OK");
 
-    println!("Checking storage health... ");
-    storage.health_check()?;
-    println!("OK");
+    let mut storage = None;
+    if let Some(strg) = args.storage {
+        println!("Setting up storage... ");
+        storage = Some(new_storage(
+            &strg,
+            args.storage_access_key,
+            args.storage_secret_key,
+            args.storage_endpoint,
+        )?);
+        println!("OK");
+
+        println!("Checking storage health... ");
+        storage.clone().unwrap().health_check()?;
+        println!("OK");
+    }
 
     println!("Connecting to hosts:");
     args.peers.iter().for_each(|h| print!(" {}", h));

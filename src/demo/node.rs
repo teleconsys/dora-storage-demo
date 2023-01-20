@@ -64,7 +64,7 @@ impl Node {
 
     pub fn run(
         self,
-        storage: Storage,
+        storage: Option<Storage>,
         did_network: Option<String>,
         did_url: Option<String>,
         num_participants: usize,
@@ -122,7 +122,10 @@ impl Node {
             log::info!("Committee's DID has been published, DID URL: {}", did_url);
 
             let resolved_did = resolve_document(did_url.clone())?;
-            storage.put(did_url, &resolved_did.to_bytes()?)?;
+            
+            if let Some(strg) = storage {
+                strg.put(did_url, &resolved_did.to_bytes()?)?;
+            }
         }
 
         Ok((signature, dist_pub_key))

@@ -118,4 +118,3 @@ pub fn resolve_did(did_url: String) -> Result<IotaDocument> {
 
     Ok(resolved_doc.document)
 }
-

@@ -3,6 +3,7 @@ use s3::Bucket;
 
 use super::storages::minio::setup_minio_local_storage;
 
+#[derive(Clone)]
 pub enum Storage {
     MinioLocal { bucket: Bucket },
 }
