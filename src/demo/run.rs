@@ -80,7 +80,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
     let is_completed = Arc::new(AtomicBool::new(false));
 
     let (dkg_input_channel_sender, dkg_input_channel) = mpsc::channel();
-    let (dkg_output_channel, dkg_input_channel_receiver) = mpsc::channel();
+    let (dkg_output_channel, dkg_output_channel_receiver) = mpsc::channel();
 
     let dkg_listen_relay = ListenRelay::new(
         args.host.clone(),
@@ -88,7 +88,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
         is_completed.clone(),
     );
     let mut dkg_broadcast_relay = BroadcastRelay::new(
-        dkg_input_channel_receiver,
+        dkg_output_channel_receiver,
         args.peers.iter().map(Into::into).collect(),
     );
 

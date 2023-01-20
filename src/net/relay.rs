@@ -100,7 +100,7 @@ impl<T: Serialize, R: Receiver<T>> BroadcastRelay<T, R> {
                 .input
                 .recv()
                 .map_err(|e| Error::msg(format!("{:?}", e)))?;
-            log::info!(
+            log::trace!(
                 "Relaying message: {:?}",
                 serde_json::to_string(&message).unwrap()
             );
@@ -110,7 +110,7 @@ impl<T: Serialize, R: Receiver<T>> BroadcastRelay<T, R> {
                 log::trace!("Sending to peer {}", destination);
                 match TcpStream::connect(destination) {
                     Ok(mut socket) => {
-                        log::info!("Relaying message to {}", socket.peer_addr()?);
+                        log::trace!("Relaying message to {}", socket.peer_addr()?);
                         socket.write_all(serialized.as_bytes())?;
                     }
                     Err(e) => {

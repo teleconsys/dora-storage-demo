@@ -37,7 +37,8 @@ pub trait Receiver<T> {
 }
 impl<T> Receiver<T> for std::sync::mpsc::Receiver<T> {
     fn recv(&mut self) -> Result<T, RecvError> {
-        self.recv()
+        let rec: &std::sync::mpsc::Receiver<T> = self;
+        rec.recv().map_err(|e| e.into())
     }
 }
 impl<T: Clone> Receiver<T> for tokio::sync::broadcast::Receiver<T> {

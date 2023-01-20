@@ -53,13 +53,13 @@ services:
         condition: service_started
     command:
       - "node"
+      - "dora-storage-2:9000"
+      - "dora-storage-3:9000"
+      - "--host=dora-storage-1:9000"
       - "--storage=minio-local"
       - "--storage-endpoint=minio-1:9000"
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
-      - "dora-storage-2:9000"
-      - "dora-storage-3:9000"
-      - "--host=dora-storage-1:9000"
       - "--did-network=iota-main"
 
   dora-storage-2:
@@ -74,13 +74,13 @@ services:
         condition: service_started
     command:
       - "node"
+      - "dora-storage-1:9000"
+      - "dora-storage-3:9000"
+      - "--host=dora-storage-2:9000"
       - "--storage=minio-local"
       - "--storage-endpoint=minio-2:9000"
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
-      - "dora-storage-1:9000"
-      - "dora-storage-3:9000"
-      - "--host=dora-storage-2:9000"
       - "--did-network=iota-main"
 
   dora-storage-3:
@@ -95,13 +95,13 @@ services:
         condition: service_started
     command:
       - "node"
+      - "dora-storage-1:9000"
+      - "dora-storage-2:9000"
+      - "--host=dora-storage-3:9000"
       - "--storage=minio-local"
       - "--storage-endpoint=minio-3:9000"
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
-      - "dora-storage-1:9000"
-      - "dora-storage-2:9000"
-      - "--host=dora-storage-3:9000"
       - "--did-network=iota-main"
 
 
