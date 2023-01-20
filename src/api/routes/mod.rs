@@ -28,7 +28,7 @@ pub async fn listen_for_message<T: Clone, F: Fn(T) -> Option<T>>(
     loop {
         let m = nodes_receiver
             .recv()
-            .map_err(|e| CommunicationError::ReceiveError(e))
+            .map_err(CommunicationError::Receive)
             .await?;
         if let Some(m) = matcher(m) {
             break Ok(m);
@@ -38,7 +38,7 @@ pub async fn listen_for_message<T: Clone, F: Fn(T) -> Option<T>>(
 
 #[derive(Debug)]
 pub enum CommunicationError {
-    SerializationError(serde_json::Error),
-    SendError(SendError<NodeMessage>),
-    ReceiveError(RecvError),
+    Serialization(serde_json::Error),
+    Send(SendError<NodeMessage>),
+    Receive(RecvError),
 }

@@ -37,7 +37,7 @@ pub trait Receiver<T> {
 }
 impl<T> Receiver<T> for std::sync::mpsc::Receiver<T> {
     fn recv(&mut self) -> Result<T, RecvError> {
-        self.recv().map_err(|e| e.into())
+        self.recv()
     }
 }
 impl<T: Clone> Receiver<T> for tokio::sync::broadcast::Receiver<T> {
@@ -50,13 +50,13 @@ impl<T: Clone> Receiver<T> for tokio::sync::broadcast::Receiver<T> {
 pub struct RecvError;
 
 impl From<std::sync::mpsc::RecvError> for RecvError {
-    fn from(value: std::sync::mpsc::RecvError) -> Self {
+    fn from(_value: std::sync::mpsc::RecvError) -> Self {
         Self
     }
 }
 
 impl From<tokio::sync::broadcast::error::RecvError> for RecvError {
-    fn from(value: tokio::sync::broadcast::error::RecvError) -> Self {
+    fn from(_value: tokio::sync::broadcast::error::RecvError) -> Self {
         Self
     }
 }

@@ -13,7 +13,7 @@ pub async fn save(
 ) -> Result<web::Json<StoreResponse>, StoreRequestError> {
     data.nodes_sender
         .send(NodeMessage::SaveRequest(req_body.message_id.clone()))
-        .map_err(|e| CommunicationError::SendError(e))?;
+        .map_err(CommunicationError::Send)?;
     let nodes_response =
         listen_for_message(&mut data.nodes_receiver.lock().unwrap(), |m| match m {
             NodeMessage::SaveResponse(_) => Some(m),
@@ -59,6 +59,6 @@ impl From<CommunicationError> for StoreRequestError {
 
 impl From<serde_json::Error> for CommunicationError {
     fn from(value: serde_json::Error) -> Self {
-        CommunicationError::SerializationError(value)
+        CommunicationError::Serialization(value)
     }
 }

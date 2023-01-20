@@ -1,9 +1,9 @@
 use anyhow::{Error, Result};
 use std::{
-    fmt::{Debug, Display},
+    fmt::{Display},
     io::{self, Read, Write},
     marker::PhantomData,
-    net::{Ipv6Addr, SocketAddr, SocketAddrV6, TcpListener, TcpStream},
+    net::{SocketAddr, TcpListener, TcpStream},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
