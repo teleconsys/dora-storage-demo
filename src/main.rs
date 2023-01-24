@@ -21,7 +21,10 @@ use anyhow::Result;
 use api::routes::AppData;
 
 use clap::Parser;
-use demo::run::{run_node, NodeArgs};
+use demo::{
+    run::{run_node, NodeArgs},
+    run_iota::{IotaNodeArgs, self},
+};
 
 use net::host::Host;
 use states::dkg;
@@ -46,6 +49,7 @@ struct Args {
 enum Action {
     Node(NodeArgs),
     Api(ApiArgs),
+    IotaNode(IotaNodeArgs),
 }
 
 fn main() -> Result<()> {
@@ -55,6 +59,7 @@ fn main() -> Result<()> {
     match args.action {
         Action::Node(args) => run_node(args)?,
         Action::Api(args) => run_api(args)?,
+        Action::IotaNode(args) => run_iota::run_node(args)?,
     }
 
     Ok(())
@@ -70,7 +75,8 @@ fn run_api(args: ApiArgs) -> Result<()> {
     let peers = args.nodes.into_iter().map(|h| h.into()).collect();
 
     let mut broadcast = net::relay::BroadcastRelay::new(outbound_receiver, peers);
-    let listener = net::relay::ListenRelay::new(args.host.clone(), inbound_sender.clone(), is_finished);
+    let listener =
+        net::relay::ListenRelay::new(args.host.clone(), inbound_sender.clone(), is_finished);
 
     let broadcast_handler = thread::spawn(move || broadcast.broadcast().unwrap());
     let listener_handler = thread::spawn(move || listener.listen().unwrap());

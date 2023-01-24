@@ -52,10 +52,10 @@ services:
       minio-1:
         condition: service_started
     command:
-      - "node"
-      - "dora-storage-2:9000"
-      - "dora-storage-3:9000"
-      - "--host=dora-storage-1:9000"
+      - "iota-node"
+      - "dora-node-2"
+      - "dora-node-3"
+      - "--index=dora-node-1"
       - "--storage=minio-local"
       - "--storage-endpoint=minio-1:9000"
       - "--storage-access-key=admin"
@@ -73,10 +73,10 @@ services:
       minio-2:
         condition: service_started
     command:
-      - "node"
-      - "dora-storage-1:9000"
-      - "dora-storage-3:9000"
-      - "--host=dora-storage-2:9000"
+      - "iota-node"
+      - "dora-node-1"
+      - "dora-node-3"
+      - "--index=dora-node-2"
       - "--storage=minio-local"
       - "--storage-endpoint=minio-2:9000"
       - "--storage-access-key=admin"
@@ -94,10 +94,10 @@ services:
       minio-3:
         condition: service_started
     command:
-      - "node"
-      - "dora-storage-1:9000"
-      - "dora-storage-2:9000"
-      - "--host=dora-storage-3:9000"
+      - "iota-node"
+      - "dora-node-2"
+      - "dora-node-1"
+      - "--index=dora-node-3"
       - "--storage=minio-local"
       - "--storage-endpoint=minio-3:9000"
       - "--storage-access-key=admin"

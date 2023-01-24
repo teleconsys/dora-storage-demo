@@ -1,14 +1,14 @@
-use std::fmt::{Display};
+use std::fmt::Display;
 
-pub trait Sender<T> {
+pub trait Sender<T>: Clone + Send {
     fn send(&self, t: T) -> Result<(), SendError<T>>;
 }
-impl<T> Sender<T> for std::sync::mpsc::Sender<T> {
+impl<T: Send> Sender<T> for std::sync::mpsc::Sender<T> {
     fn send(&self, t: T) -> Result<(), SendError<T>> {
         self.send(t).map_err(|e| e.into())
     }
 }
-impl<T> Sender<T> for tokio::sync::broadcast::Sender<T> {
+impl<T: Send> Sender<T> for tokio::sync::broadcast::Sender<T> {
     fn send(&self, t: T) -> Result<(), SendError<T>> {
         self.send(t).map_err(|e| e.into()).map(|_| ())
     }
