@@ -1,9 +1,13 @@
 use std::{
     str,
-    sync::{mpsc::channel, Arc, Mutex},
+    sync::{
+        mpsc::{channel, Receiver},
+        Arc, Mutex,
+    },
 };
 
 use anyhow::Result;
+use identity_iota::iota_core::Network;
 use iota_client::{
     bee_message::prelude::{Message, Payload},
     Client, MqttEvent, Topic,
@@ -18,9 +22,12 @@ pub fn new_listener(network: &str) -> Result<Listener> {
 }
 
 impl Listener {
-    pub async fn start(&mut self, index: String) -> Result<()> {
-        self.listen_index(index).await?;
-        Ok(())
+    pub fn new(network: Network) -> Result<Self> {
+        new_listener(network.name_str())
+    }
+
+    pub async fn start(&mut self, index: String) -> Result<Receiver<Vec<u8>>> {
+        self.listen_index(index).await
     }
 
     pub async fn stop(&mut self) -> Result<()> {
@@ -28,7 +35,7 @@ impl Listener {
         Ok(())
     }
 
-    async fn listen_index(&mut self, index: String) -> Result<()> {
+    async fn listen_index(&mut self, index: String) -> Result<Receiver<Vec<u8>>> {
         let (tx, rx) = channel();
         let tx = Arc::new(Mutex::new(tx));
 
@@ -50,15 +57,12 @@ impl Listener {
             .subscribe(move |event| {
                 let message: Message = serde_json::from_str(&event.payload).unwrap();
                 if let Payload::Indexation(payload) = message.payload().as_ref().unwrap() {
-                    println!("{}", str::from_utf8(payload.data()).unwrap());
+                    // println!("{}", str::from_utf8(payload.data()).unwrap());
+                    tx.lock().unwrap().send(Vec::from(payload.data())).unwrap();
                 }
-                tx.lock().unwrap().send(()).unwrap();
             })
             .await?;
-
-        loop {
-            rx.recv()?;
-        }
+        Ok(rx)
     }
 }
 
@@ -69,6 +73,10 @@ pub fn new_publisher(network: &str) -> Result<Publisher> {
 }
 
 impl Publisher {
+    pub fn new(network: Network) -> Result<Self> {
+        new_publisher(network.name_str())
+    }
+
     pub async fn publish(&self, data: &[u8], index: Option<String>) -> Result<String> {
         // Build message with optional index
         let client_message_builder = match index {
