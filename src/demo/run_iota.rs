@@ -46,8 +46,8 @@ pub struct IotaNodeArgs {
     #[arg(long = "storage-secret-key", default_value = None)]
     storage_secret_key: Option<String>,
 
-    #[arg(long = "did-network", default_value = None)]
-    did_network: Option<String>,
+    #[arg(long = "did-network", default_value = "iota-dev")]
+    did_network: String,
 }
 
 pub fn run_node(args: IotaNodeArgs) -> Result<()> {
@@ -84,9 +84,10 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
         dkg_input_channel_sender,
         is_completed.clone(),
         args.peers.clone(),
+        args.did_network.clone()
     );
     let mut dkg_broadcast_relay =
-        IotaBroadcastRelay::new(args.index.clone(), dkg_output_channel_receiver)?;
+        IotaBroadcastRelay::new(args.index.clone(), dkg_output_channel_receiver, args.did_network.clone())?;
 
     let dkg_listen_relay_handle = thread::spawn(move || dkg_listen_relay.listen());
     let dkg_broadcast_relay_handle = thread::spawn(move || dkg_broadcast_relay.broadcast());
@@ -95,9 +96,9 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     let (sign_output_channel, sign_input_channel_receiver) = mpsc::channel();
 
     let sign_listen_relay =
-        IotaListenRelay::new(sign_input_channel_sender, is_completed.clone(), args.peers);
+        IotaListenRelay::new(sign_input_channel_sender, is_completed.clone(), args.peers, args.did_network.clone());
     let mut sign_broadcast_relay =
-        IotaBroadcastRelay::new(args.index.clone(), sign_input_channel_receiver)?;
+        IotaBroadcastRelay::new(args.index.clone(), sign_input_channel_receiver, args.did_network.clone())?;
 
     let sign_listen_relay_handle = thread::spawn(move || sign_listen_relay.listen());
     let sign_broadcast_relay_handle = thread::spawn(move || sign_broadcast_relay.broadcast());
@@ -112,19 +113,19 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     );
 
     let mut did_url = None;
-    if let Some(network) = args.did_network.clone() {
-        let eddsa = EdDSA::from(keypair);
-        let document = new_document(&eddsa.public.marshal_binary()?, &network, None, None)?;
-        let signature = eddsa.sign(&document.to_bytes()?)?;
-        did_url = Some(document.did_url());
-        document.publish(&signature)?;
-        log::info!(
-            "Node's DID has been published, DID URL: {}",
-            did_url.clone().unwrap()
-        );
-    }
+    let network = args.did_network.clone();
+    let eddsa = EdDSA::from(keypair);
+    let document = new_document(&eddsa.public.marshal_binary()?, &network, None, None)?;
+    let signature = eddsa.sign(&document.to_bytes()?)?;
+    did_url = Some(document.did_url());
+    document.publish(&signature)?;
+    log::info!(
+        "Node's DID has been published, DID URL: {}",
+        did_url.clone().unwrap()
+    );
+    
 
-    let (_signature, _public_key) = node.run(storage, args.did_network, did_url, 3)?;
+    let (_signature, _public_key) = node.run(storage, Some(args.did_network), did_url, 3)?;
 
     is_completed.store(true, Ordering::SeqCst);
 

@@ -85,21 +85,28 @@ pub struct IotaListenRelay<T, S: Sender<T>> {
     output: S,
     is_closed: Arc<AtomicBool>,
     indexes: Vec<String>,
+    network: Network,
     _phantom_data: PhantomData<T>,
 }
 
 impl<T: DeserializeOwned + Display, S: Sender<T> + 'static> IotaListenRelay<T, S> {
-    pub fn new(output: S, is_closed: Arc<AtomicBool>, indexes: Vec<String>) -> Self {
+    pub fn new(output: S, is_closed: Arc<AtomicBool>, indexes: Vec<String>, network: String) -> Self {
+        let net = match network.as_str() {
+            "iota-main" => Network::Mainnet,
+            "iota-dev" => Network::Devnet,
+            _ => panic!("unsupported network"), 
+        };
         Self {
             output,
             is_closed,
             indexes,
             _phantom_data: PhantomData,
+            network: net,
         }
     }
 
     pub fn listen(&self) -> Result<()> {
-        let mut listener = Listener::new(Network::Devnet)?;
+        let mut listener = Listener::new(self.network.clone())?;
         let receivers: Vec<std::sync::mpsc::Receiver<Vec<u8>>> = self
             .indexes
             .iter()
@@ -180,8 +187,13 @@ pub struct IotaBroadcastRelay<T, R: Receiver<T>> {
 }
 
 impl<T: Serialize, R: Receiver<T>> IotaBroadcastRelay<T, R> {
-    pub fn new(index: String, input: R) -> Result<Self> {
-        let publisher = Publisher::new(Network::Devnet)?;
+    pub fn new(index: String, input: R, network: String) -> Result<Self> {
+        let net = match network.as_str() {
+            "iota-main" => Network::Mainnet,
+            "iota-dev" => Network::Devnet,
+            _ => panic!("unsupported network"), 
+        };
+        let publisher = Publisher::new(net)?;
         Ok(IotaBroadcastRelay {
             input,
             index,
