@@ -24,7 +24,7 @@ pub enum Transition<T: StateMachineTypes> {
 pub trait State<T: StateMachineTypes>: Display + Send {
     fn initialize(&self) -> Vec<T::Message>;
     fn deliver(&mut self, message: T::Message) -> DeliveryStatus<T::Message>;
-    fn advance(&self) -> Result<Transition<T>, Error>;
+    fn advance(&mut self) -> Result<Transition<T>, Error>;
 }
 
 pub trait StateMachineTypes {

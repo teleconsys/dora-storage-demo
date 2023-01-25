@@ -72,7 +72,7 @@ impl State<DkgTypes> for Initializing {
         }
     }
 
-    fn advance(&self) -> Result<Transition<DkgTypes>, Error> {
+    fn advance(&mut self) -> Result<Transition<DkgTypes>, Error> {
         if self.public_keys.len() == self.num_participants
             || self.did_urls.len() == self.num_participants
         {

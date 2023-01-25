@@ -7,7 +7,7 @@ use crate::states::dkg::InitializingIota;
 use crate::states::feed::{Feed, MessageWrapper};
 use crate::states::fsm::StateMachine;
 use crate::store::Storage;
-use anyhow::{Ok, Result};
+use anyhow::{bail, Ok, Result};
 use kyber_rs::encoding::BinaryMarshaler;
 
 use crate::states::sign::{self, SignMessage, SignTerminalStates, Signature};
@@ -69,6 +69,8 @@ impl Node {
         did_network: Option<String>,
         did_url: Option<String>,
         num_participants: usize,
+        signature_sender: Sender<MessageWrapper<SignMessage>>,
+        signature_sleep_time: u64,
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
@@ -102,6 +104,8 @@ impl Node {
         let sign_initial_state = sign::InitializingBuilder::try_from(dkg)?
             .with_message(document.to_bytes()?)
             .with_secret(secret)
+            .with_sender(signature_sender)
+            .with_sleep_time(signature_sleep_time)
             .build()?;
 
         let mut sign_fsm = StateMachine::new(
@@ -114,22 +118,27 @@ impl Node {
 
         let sign_terminal_state = sign_fsm.run()?;
 
-        let SignTerminalStates::Completed(signature) = sign_terminal_state;
+        if let SignTerminalStates::Completed(signature, _processed_partial_owners, _bad_signers) =
+            sign_terminal_state
+        {
+            if did_network.is_some() {
+                // Publish signed DID
+                let did_url = document.did_url();
+                document.publish(&signature.to_vec())?;
+                log::info!("Committee's DID has been published, DID URL: {}", did_url);
 
-        if did_network.is_some() {
-            // Publish signed DID
-            let did_url = document.did_url();
-            document.publish(&signature.to_vec())?;
-            log::info!("Committee's DID has been published, DID URL: {}", did_url);
+                let resolved_did = resolve_document(did_url.clone())?;
 
-            let resolved_did = resolve_document(did_url.clone())?;
-
-            if let Some(strg) = storage {
-                strg.put(did_url, &resolved_did.to_bytes()?)?;
+                if let Some(strg) = storage {
+                    strg.put(did_url, &resolved_did.to_bytes()?)?;
+                }
             }
+            Ok((signature, dist_pub_key))
+        } else {
+            let did_url = document.did_url();
+            log::info!("Could not sign committee's DID, DID URL: {}", did_url);
+            Ok((Signature::from(vec![]), dist_pub_key))
         }
-
-        Ok((signature, dist_pub_key))
     }
 
     pub fn run_iota(
@@ -139,11 +148,14 @@ impl Node {
         own_did_url: String,
         did_urls: Vec<String>,
         num_participants: usize,
+        time_resolution: usize,
+        signature_sender: Sender<MessageWrapper<SignMessage>>,
+        signature_sleep_time: u64,
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
         let dkg_initial_state =
-            InitializingIota::new(self.keypair, own_did_url, did_urls, num_participants);
+            InitializingIota::new(self.keypair, own_did_url, did_urls, num_participants)?;
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
             Feed::new(self.dkg_input_channel, public.clone()),
@@ -159,13 +171,15 @@ impl Node {
         let document = new_document(
             &dist_pub_key.marshal_binary()?,
             &did_network,
-            Some(20),
-            Some(did_urls),
+            Some(time_resolution as u32),
+            Some(did_urls.clone()),
         )?;
 
         let sign_initial_state = sign::InitializingBuilder::try_from(dkg)?
             .with_message(document.to_bytes()?)
             .with_secret(secret)
+            .with_sender(signature_sender)
+            .with_sleep_time(signature_sleep_time)
             .build()?;
 
         let mut sign_fsm = StateMachine::new(
@@ -177,19 +191,52 @@ impl Node {
         );
 
         let sign_terminal_state = sign_fsm.run()?;
-        let SignTerminalStates::Completed(signature) = sign_terminal_state;
 
-        // Publish signed DID
-        let did_url = document.did_url();
-        document.publish(&signature.to_vec())?;
-        log::info!("Committee's DID has been published, DID URL: {}", did_url);
+        if let SignTerminalStates::Completed(signature, processed_partial_owners, bad_signers) =
+            sign_terminal_state
+        {
+            // find out who didn't send a partial signature
+            let mut working_nodes = vec![];
+            for owner in processed_partial_owners {
+                working_nodes.push(public_to_did(&did_urls, owner)?);
+            }
+            let mut absent_nodes = did_urls.clone();
+            for worker in working_nodes {
+                absent_nodes.retain(|x| *x != worker);
+            }
 
-        let resolved_did = resolve_document(did_url.clone())?;
+            // find out who was a bad signer
+            let mut bad_signers_nodes = vec![];
+            for owner in bad_signers {
+                bad_signers_nodes.push(public_to_did(&did_urls, owner)?);
+            }
+            log::info!("Signature success. Nodes that didn't participate: {:?}. Nodes that didn't provide a correct signature: {:?}", absent_nodes, bad_signers_nodes);
 
-        if let Some(strg) = storage {
-            strg.put(did_url, &resolved_did.to_bytes()?)?;
+            // Publish signed DID
+            let did_url = document.did_url();
+            document.publish(&signature.to_vec())?;
+            log::info!("Committee's DID has been published, DID URL: {}", did_url);
+
+            let resolved_did = resolve_document(did_url.clone())?;
+
+            if let Some(strg) = storage {
+                strg.put(did_url, &resolved_did.to_bytes()?)?;
+            }
+
+            Ok((signature, dist_pub_key))
+        } else {
+            let did_url = document.did_url();
+            log::info!("Could not sign committee's DID, DID URL: {}", did_url);
+            Ok((Signature::from(vec![]), dist_pub_key))
         }
-
-        Ok((signature, dist_pub_key))
     }
+}
+
+fn public_to_did(did_urls: &[String], public_key: Point) -> Result<String> {
+    for did_url in did_urls.iter() {
+        if resolve_document(did_url.to_string())?.public_key()? == public_key {
+            return Ok(did_url.to_string());
+        }
+    }
+    bail!("could not find the offending DID")
 }

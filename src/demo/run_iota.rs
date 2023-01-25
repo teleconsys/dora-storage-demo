@@ -46,6 +46,15 @@ pub struct IotaNodeArgs {
 
     #[arg(long = "did-network", default_value = "iota-dev")]
     did_network: String,
+
+    #[arg(short, long = "nodes-number", default_value = "3")]
+    nodes_number: usize,
+
+    #[arg(short, long = "time-resolution", default_value = "20")]
+    time_resolution: usize,
+
+    #[arg(long = "signature-sleep-time", default_value = "5")]
+    signature_sleep_time: u64,
 }
 
 pub fn run_node(args: IotaNodeArgs) -> Result<()> {
@@ -118,7 +127,7 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     let (sign_output_channel, sign_input_channel_receiver) = mpsc::channel();
 
     let sign_listen_relay = IotaListenRelay::new(
-        sign_input_channel_sender,
+        sign_input_channel_sender.clone(),
         is_completed.clone(),
         peers_indexes,
         args.did_network.clone(),
@@ -150,7 +159,16 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
         id,
     );
 
-    let (_signature, _public_key) = node.run_iota(storage, network, did_url, peers_dids, 3)?;
+    let (_signature, _public_key) = node.run_iota(
+        storage,
+        network,
+        did_url,
+        peers_dids,
+        args.nodes_number,
+        args.time_resolution,
+        sign_input_channel_sender,
+        args.signature_sleep_time,
+    )?;
 
     is_completed.store(true, Ordering::SeqCst);
 

@@ -45,7 +45,7 @@ impl State<DkgTypes> for ProcessingJustifications {
         todo!()
     }
 
-    fn advance(&self) -> Result<Transition<DkgTypes>, anyhow::Error> {
+    fn advance(&mut self) -> Result<Transition<DkgTypes>, anyhow::Error> {
         if !self.dkg.certified() {
             bail!("Deal not certified")
         }

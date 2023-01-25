@@ -5,4 +5,5 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, EnumDisplay, Serialize, Deserialize)]
 pub enum SignMessage {
     PartialSignature(PartialSig<SuiteEd25519>),
+    WaitingDone,
 }

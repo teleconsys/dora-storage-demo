@@ -66,7 +66,7 @@ impl State<DkgTypes> for ProcessingSecretCommits {
         }
     }
 
-    fn advance(&self) -> Result<Transition<DkgTypes>, Error> {
+    fn advance(&mut self) -> Result<Transition<DkgTypes>, Error> {
         let num_other_nodes = self.dkg.participants.len() - 1;
         if self.optional_complaints.len() == num_other_nodes {
             let transition = Transition::Next(Box::new(ProcessingComplaints::new(

@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use anyhow::Error;
+use anyhow::{Error, Result};
 use kyber_rs::{
     group::edwards25519::{Point, SuiteEd25519},
     share::dkg::rabin::new_dist_key_generator,
@@ -33,20 +33,20 @@ impl InitializingIota {
         own_did_url: String,
         peers_did_urls: Vec<String>,
         num_participants: usize,
-    ) -> InitializingIota {
+    ) -> Result<InitializingIota> {
         let mut public_keys = Vec::with_capacity(num_participants);
         public_keys.push(key.public.clone());
         for url in peers_did_urls.clone() {
-            public_keys.push(resolve_document(url).unwrap().public_key().unwrap());
+            public_keys.push(resolve_document(url)?.public_key()?);
         }
         let mut did_urls = peers_did_urls;
         did_urls.push(own_did_url);
-        Self {
+        Ok(Self {
             key,
             num_participants,
             public_keys,
             did_urls,
-        }
+        })
     }
 }
 
@@ -60,7 +60,7 @@ impl State<DkgTypes> for InitializingIota {
         DeliveryStatus::Unexpected(m)
     }
 
-    fn advance(&self) -> Result<Transition<DkgTypes>, Error> {
+    fn advance(&mut self) -> Result<Transition<DkgTypes>, Error> {
         if self.public_keys.len() == self.num_participants {
             let mut public_keys = self.public_keys.clone();
             public_keys.sort_by_key(|pk| pk.to_string());

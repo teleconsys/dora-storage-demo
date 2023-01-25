@@ -67,7 +67,7 @@ impl State<DkgTypes> for ProcessingComplaints {
         }
     }
 
-    fn advance(&self) -> Result<Transition<DkgTypes>, anyhow::Error> {
+    fn advance(&mut self) -> Result<Transition<DkgTypes>, anyhow::Error> {
         Ok(Transition::Next(Box::new(
             ProcessingReconstructCommits::new(self.dkg.to_owned(), self.did_urls.clone()),
         )))

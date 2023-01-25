@@ -67,7 +67,7 @@ impl State<DkgTypes> for ProcessingDeals {
         }
     }
 
-    fn advance(&self) -> Result<Transition<DkgTypes>, Error> {
+    fn advance(&mut self) -> Result<Transition<DkgTypes>, Error> {
         match self.responses.len() {
             n if n == self.dkg.participants.len() - 1 => {
                 Ok(Transition::Next(Box::new(ProcessingResponses::new(
