@@ -1,7 +1,7 @@
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc::{self, Sender}, Arc,
+        mpsc, Arc,
     },
     thread,
 };
@@ -13,28 +13,22 @@ use kyber_rs::{
     encoding::BinaryMarshaler, group::edwards25519::SuiteEd25519, sign::eddsa::EdDSA,
     util::key::new_key_pair,
 };
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     demo::node::Node,
     did::new_document,
-    net::{
-        relay::{IotaBroadcastRelay, IotaListenRelay},
-    },
-    store::new_storage, dlt::iota::Listener, states::feed::MessageWrapper,
+    dlt::iota::Listener,
+    net::relay::{IotaBroadcastRelay, IotaListenRelay},
+    store::new_storage,
 };
 use anyhow::Result;
-
-#[derive(Clone, Serialize, Deserialize)]
-struct DkgInit {
-    nodes: Vec<String>
-}
 
 #[derive(Parser)]
 #[command(author, version, about = "node", long_about = None)]
 #[group()]
 pub struct IotaNodeArgs {
-    /// Hosts to connect to
+    /// governor to connect to
     #[arg(short, long, required = true)]
     governor: String,
 
@@ -80,16 +74,27 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     let signature = eddsa.sign(&document.to_bytes()?)?;
     let did_url = document.did_url();
     document.publish(&signature)?;
-    log::info!(
-        "Node's DID has been published, DID URL: {}",
-        did_url
-    );
+    log::info!("Node's DID has been published, DID URL: {}", did_url);
 
     let is_completed = Arc::new(AtomicBool::new(false));
 
-    let peers = listen_governor_instructions(args.governor, did_url.clone(), network)?;
+    let mut all_dids =
+        listen_governor_instructions(args.governor, did_url.clone(), network.clone())?;
+
+    // get only peers dids
+    let mut peers_dids = all_dids.clone();
+    peers_dids.retain(|x| *x != did_url);
+
+    // peers dids to indexes
+    let mut peers_indexes = Vec::new();
+    for peer in peers_dids.clone() {
+        let tmp: Vec<&str> = peer.split(':').collect();
+        peers_indexes.push(tmp[tmp.len() - 1].to_string());
+    }
+
+    // own did to indexes
     let tmp: Vec<&str> = did_url.split(':').collect();
-    let own_idx = tmp[tmp.len() -1].to_string();
+    let own_idx = tmp[tmp.len() - 1].to_string();
 
     let (dkg_input_channel_sender, dkg_input_channel) = mpsc::channel();
     let (dkg_output_channel, dkg_output_channel_receiver) = mpsc::channel();
@@ -97,11 +102,14 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     let dkg_listen_relay = IotaListenRelay::new(
         dkg_input_channel_sender,
         is_completed.clone(),
-        peers.clone(),
-        args.did_network.clone()
+        peers_indexes.clone(),
+        args.did_network.clone(),
     );
-    let mut dkg_broadcast_relay =
-        IotaBroadcastRelay::new(own_idx.clone(), dkg_output_channel_receiver, args.did_network.clone())?;
+    let mut dkg_broadcast_relay = IotaBroadcastRelay::new(
+        own_idx.clone(),
+        dkg_output_channel_receiver,
+        args.did_network.clone(),
+    )?;
 
     let dkg_listen_relay_handle = thread::spawn(move || dkg_listen_relay.listen());
     let dkg_broadcast_relay_handle = thread::spawn(move || dkg_broadcast_relay.broadcast());
@@ -109,14 +117,29 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     let (sign_input_channel_sender, sign_input_channel) = mpsc::channel();
     let (sign_output_channel, sign_input_channel_receiver) = mpsc::channel();
 
-    let sign_listen_relay =
-        IotaListenRelay::new(sign_input_channel_sender, is_completed.clone(), peers, args.did_network.clone());
-    let mut sign_broadcast_relay =
-        IotaBroadcastRelay::new(own_idx, sign_input_channel_receiver, args.did_network.clone())?;
+    let sign_listen_relay = IotaListenRelay::new(
+        sign_input_channel_sender,
+        is_completed.clone(),
+        peers_indexes,
+        args.did_network.clone(),
+    );
+    let mut sign_broadcast_relay = IotaBroadcastRelay::new(
+        own_idx,
+        sign_input_channel_receiver,
+        args.did_network.clone(),
+    )?;
 
     let sign_listen_relay_handle = thread::spawn(move || sign_listen_relay.listen());
     let sign_broadcast_relay_handle = thread::spawn(move || sign_broadcast_relay.broadcast());
 
+    // get node's id in the committee
+    all_dids.sort();
+    let mut id = 0;
+    for (i, did) in all_dids.iter().enumerate() {
+        if did == &did_url {
+            id = i + 1;
+        }
+    }
 
     let node = Node::new(
         keypair,
@@ -124,11 +147,10 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
         dkg_output_channel,
         sign_input_channel,
         sign_output_channel,
-        *(did_url.as_bytes().last().unwrap()) as usize,
+        id,
     );
-    
 
-    let (_signature, _public_key) = node.run(storage, Some(args.did_network), Some(did_url), 3)?;
+    let (_signature, _public_key) = node.run_iota(storage, network, did_url, peers_dids, 3)?;
 
     is_completed.store(true, Ordering::SeqCst);
 
@@ -143,35 +165,35 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     Ok(())
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+struct DkgInit {
+    nodes: Vec<String>,
+}
 
-fn listen_governor_instructions(governor_index: String, own_did: String, network: String) -> Result<Vec<String>> {
+fn listen_governor_instructions(
+    governor_index: String,
+    own_did: String,
+    network: String,
+) -> Result<Vec<String>> {
     let net = match network.as_str() {
         "iota-main" => Network::Mainnet,
         "iota-dev" => Network::Devnet,
-        _ => panic!("unsupported network"), 
+        _ => panic!("unsupported network"),
     };
-    let tmp: Vec<&str> = own_did.split(':').collect();
-    let own_idx = tmp[tmp.len() -1].to_string();
-    let mut init_listener =  Listener::new(net)?;
+    let mut init_listener = Listener::new(net)?;
     log::trace!("Listening on governor index");
     let receiver = tokio::runtime::Runtime::new()?.block_on(init_listener.start(governor_index))?;
-    let mut b = false;
-    let mut pos = 0;
     loop {
         if let Some(data) = receiver.iter().next() {
-            let message: DkgInit = serde_json::from_slice(&data).unwrap();   
-            for (i, node) in message.nodes.iter().enumerate() {
-                if own_idx == *node {
-                    b = true;
-                    pos = i;
+            let mut deserializer = serde_json::Deserializer::from_slice(&data);
+            if let Ok(message) = DkgInit::deserialize(&mut deserializer) {
+                for node in message.nodes.iter() {
+                    if own_did == *node {
+                        log::trace!("Requested DKG from governor");
+                        return Ok(message.nodes);
+                    }
                 }
             }
-            if b {
-                log::trace!("Requested DKG from governor");
-                let mut tmp = message.nodes;
-                tmp.remove(pos);
-                return Ok(tmp)  
-            }      
         }
     }
 }

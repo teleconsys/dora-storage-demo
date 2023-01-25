@@ -126,7 +126,13 @@ impl State<SignTypes> for Initializing {
         match message {
             SignMessage::PartialSignature(ps) => match self.dss.process_partial_sig(ps) {
                 Ok(()) => DeliveryStatus::Delivered,
-                Err(e) => DeliveryStatus::Error(e),
+                Err(e) => {
+                    if e.to_string() == "dss: partial signature not valid" {
+                        DeliveryStatus::Delivered
+                    } else {
+                        DeliveryStatus::Error(e)
+                    }
+                }
             },
         }
     }

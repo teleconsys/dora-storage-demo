@@ -1,4 +1,5 @@
 mod initializing;
+mod initializing_iota;
 mod messages;
 mod processing_complaints;
 mod processing_deals;
@@ -8,6 +9,7 @@ mod processing_responses;
 mod processing_secret_commits;
 
 pub use initializing::Initializing;
+pub use initializing_iota::InitializingIota;
 use kyber_rs::{
     group::edwards25519::{Point, SuiteEd25519},
     share::dkg::rabin::DistKeyGenerator,

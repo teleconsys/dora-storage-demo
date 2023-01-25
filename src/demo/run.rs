@@ -52,7 +52,6 @@ pub struct NodeArgs {
 }
 
 pub fn run_node(args: NodeArgs) -> Result<()> {
-
     let mut storage = None;
     if let Some(strg) = args.storage {
         println!("Setting up storage... ");

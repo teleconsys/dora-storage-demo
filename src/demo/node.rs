@@ -3,6 +3,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use crate::did::{new_document, resolve_document};
 use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates, Initializing};
 use crate::net::broadcast::LocalBroadcast;
+use crate::states::dkg::InitializingIota;
 use crate::states::feed::{Feed, MessageWrapper};
 use crate::states::fsm::StateMachine;
 use crate::store::Storage;
@@ -122,10 +123,71 @@ impl Node {
             log::info!("Committee's DID has been published, DID URL: {}", did_url);
 
             let resolved_did = resolve_document(did_url.clone())?;
-            
+
             if let Some(strg) = storage {
                 strg.put(did_url, &resolved_did.to_bytes()?)?;
             }
+        }
+
+        Ok((signature, dist_pub_key))
+    }
+
+    pub fn run_iota(
+        self,
+        storage: Option<Storage>,
+        did_network: String,
+        own_did_url: String,
+        did_urls: Vec<String>,
+        num_participants: usize,
+    ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
+        let secret = self.keypair.private.clone();
+        let public = self.keypair.public.clone();
+        let dkg_initial_state =
+            InitializingIota::new(self.keypair, own_did_url, did_urls, num_participants);
+        let mut dkg_fsm = StateMachine::new(
+            Box::new(dkg_initial_state),
+            Feed::new(self.dkg_input_channel, public.clone()),
+            self.dkg_output_channel,
+            self.id,
+            public.clone(),
+        );
+        let dkg_terminal_state = dkg_fsm.run()?;
+        let DkgTerminalStates::Completed { dkg, did_urls } = dkg_terminal_state;
+        let dist_pub_key = dkg.dist_key_share()?.public();
+
+        // Create unsigned DID
+        let document = new_document(
+            &dist_pub_key.marshal_binary()?,
+            &did_network,
+            Some(20),
+            Some(did_urls),
+        )?;
+
+        let sign_initial_state = sign::InitializingBuilder::try_from(dkg)?
+            .with_message(document.to_bytes()?)
+            .with_secret(secret)
+            .build()?;
+
+        let mut sign_fsm = StateMachine::new(
+            Box::new(sign_initial_state),
+            Feed::new(self.sign_input_channel, public.clone()),
+            self.sign_output_channel,
+            self.id,
+            public,
+        );
+
+        let sign_terminal_state = sign_fsm.run()?;
+        let SignTerminalStates::Completed(signature) = sign_terminal_state;
+
+        // Publish signed DID
+        let did_url = document.did_url();
+        document.publish(&signature.to_vec())?;
+        log::info!("Committee's DID has been published, DID URL: {}", did_url);
+
+        let resolved_did = resolve_document(did_url.clone())?;
+
+        if let Some(strg) = storage {
+            strg.put(did_url, &resolved_did.to_bytes()?)?;
         }
 
         Ok((signature, dist_pub_key))
