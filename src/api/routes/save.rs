@@ -12,11 +12,13 @@ pub async fn save(
     data: web::Data<AppData>,
 ) -> Result<web::Json<StoreResponse>, StoreRequestError> {
     data.nodes_sender
-        .send(NodeMessage::SaveRequest(req_body.message_id.clone()))
+        .send(NodeMessage::StoreRequest(StoreRequest {
+            message_id: req_body.message_id.clone(),
+        }))
         .map_err(CommunicationError::Send)?;
     let nodes_response =
         listen_for_message(&mut data.nodes_receiver.lock().unwrap(), |m| match m {
-            NodeMessage::SaveResponse(_) => Some(m),
+            NodeMessage::StoreResponse(_) => Some(m),
             _ => None,
         })
         .await?;
@@ -27,21 +29,22 @@ pub async fn save(
     Ok(actix_web::web::Json(response))
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoreRequest {
-    message_id: String,
+    pub message_id: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum StoreResponse {
     Success(String),
     Failure(StoreError),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum StoreError {
     NotFoundOnIOTA,
     CouldNotSign,
+    StorageError(String),
 }
 
 #[derive(Debug, EnumDisplay)]

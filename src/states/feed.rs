@@ -2,18 +2,19 @@ use kyber_rs::group::edwards25519::Point;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
-use std::sync::mpsc::{Receiver, RecvError};
 use thiserror::Error;
+
+use crate::net::channel::Receiver;
 
 /// [Feed] combines polling from a queue of messages and a channel. Message can be delayed
 /// and later placed in the queue.
 #[derive(Debug)]
-pub struct Feed<T: Display + Serialize> {
+pub struct Feed<T: Display + Serialize, R: Receiver<MessageWrapper<T>>> {
     /// Messages from [queue] will be delivered first.
     queue: VecDeque<T>,
 
     /// Channel to receive message to deliver..
-    receiver: Receiver<MessageWrapper<T>>,
+    receiver: R,
 
     filter_key: Point,
 
@@ -21,8 +22,8 @@ pub struct Feed<T: Display + Serialize> {
     delayed: Vec<T>,
 }
 
-impl<T: Display + Serialize> Feed<T> {
-    pub(crate) fn new(feed: Receiver<MessageWrapper<T>>, key: Point) -> Self {
+impl<T: Display + Serialize, R: Receiver<MessageWrapper<T>>> Feed<T, R> {
+    pub(crate) fn new(feed: R, key: Point) -> Self {
         Self {
             queue: VecDeque::new(),
             receiver: feed,

@@ -1,16 +1,24 @@
 use std::sync::mpsc::{Receiver, Sender};
 
+use crate::api::routes::delete::{DeleteRequest, DeleteResponse};
+use crate::api::routes::get::{GetError, GetRequest, GetResponse};
+use crate::api::routes::save::{StoreError, StoreRequest, StoreResponse};
+use crate::api::routes::NodeMessage;
 use crate::did::{new_document, resolve_document};
 use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates, Initializing};
 use crate::net::broadcast::LocalBroadcast;
 use crate::states::dkg::InitializingIota;
 use crate::states::feed::{Feed, MessageWrapper};
-use crate::states::fsm::StateMachine;
+use crate::states::fsm::{StateMachine, StateMachineTypes};
 use crate::store::Storage;
-use anyhow::{bail, Ok, Result};
+use anyhow::bail;
+use identity_iota::iota_core::{self, MessageId};
+use iota_client::Client;
 use kyber_rs::encoding::BinaryMarshaler;
+use kyber_rs::group::edwards25519::{Scalar, SuiteEd25519};
+use kyber_rs::share::dkg::rabin::DistKeyGenerator;
 
-use crate::states::sign::{self, SignMessage, SignTerminalStates, Signature};
+use crate::states::sign::{self, SignMessage, SignTerminalStates, SignTypes, Signature};
 use kyber_rs::{group::edwards25519::Point, util::key::Pair};
 
 pub struct Node {
@@ -232,11 +240,148 @@ impl Node {
     }
 }
 
-fn public_to_did(did_urls: &[String], public_key: Point) -> Result<String> {
+fn public_to_did(did_urls: &[String], public_key: Point) -> anyhow::Result<String> {
     for did_url in did_urls.iter() {
         if resolve_document(did_url.to_string())?.public_key()? == public_key {
             return Ok(did_url.to_string());
         }
     }
     bail!("could not find the offending DID")
+}
+
+struct ApiNode {
+    storage: Storage,
+    iota_client: Client,
+    dkg: DistKeyGenerator<SuiteEd25519>,
+    secret: Scalar,
+    nodes_input: tokio::sync::broadcast::Sender<MessageWrapper<SignMessage>>,
+    nodes_output: Sender<MessageWrapper<SignMessage>>,
+    public_key: Point,
+    id: usize,
+}
+
+impl ApiNode {
+    pub fn handle_message(
+        &self,
+        message: NodeMessage,
+    ) -> Result<Option<NodeMessage>, ApiNodeError> {
+        match message {
+            NodeMessage::StoreRequest(r) => Ok(Some(self.handle_store_request(r)?)),
+            NodeMessage::GetRequest(r) => Ok(Some(self.handle_get_request(r)?)),
+            NodeMessage::DeleteRequest(r) => Ok(Some(self.handle_delete_request(r)?)),
+            _ => todo!(),
+        }
+    }
+
+    fn handle_store_request(&self, request: StoreRequest) -> Result<NodeMessage, ApiNodeError> {
+        let rt = tokio::runtime::Runtime::new()?;
+        let raw_message_id: &[u8; 32] = request.message_id.as_bytes().try_into()?;
+        let message_id = MessageId::from(*raw_message_id);
+        let message = rt.block_on(self.iota_client.get_message().data(&message_id))?;
+        let payload = match message.payload() {
+            Some(p) => p,
+            None => return Err(ApiNodeError::MissingPayload(message_id)),
+        };
+        let indexation_payload = match payload {
+            iota_client::bee_message::prelude::Payload::Indexation(i) => i,
+            _ => return Err(ApiNodeError::UnsupportedPayload),
+        };
+        match self
+            .storage
+            .put(request.message_id, indexation_payload.data())
+        {
+            Ok(()) => Ok(NodeMessage::StoreResponse(StoreResponse::Success(
+                "done".to_owned(),
+            ))),
+            Err(e) => Ok(NodeMessage::StoreResponse(StoreResponse::Failure(
+                StoreError::StorageError(e.to_string()),
+            ))),
+        }
+    }
+
+    fn handle_get_request(&self, request: GetRequest) -> Result<NodeMessage, ApiNodeError> {
+        let data = match self.storage.get(request.message_id) {
+            Ok(d) => d,
+            Err(e) => return Err(ApiNodeError::StorageError(e)),
+        };
+
+        let mut sign_fsm = self.get_sign_fsm(&data)?;
+        let final_state = match sign_fsm.run() {
+            Ok(state) => state,
+            Err(e) => return Err(ApiNodeError::SignatureError(e)),
+        };
+
+        match final_state {
+            SignTerminalStates::Completed(signature, ..) => {
+                let response = GetResponse::Success {
+                    signature: signature.to_vec(),
+                    data,
+                };
+
+                Ok(NodeMessage::GetResponse(response))
+            }
+            SignTerminalStates::Failed => {
+                log::error!("Sign failed");
+                Ok(NodeMessage::GetResponse(GetResponse::Failure(
+                    GetError::Message("Sign failed".to_owned()),
+                )))
+            }
+        }
+    }
+
+    fn handle_delete_request(&self, reqeust: DeleteRequest) -> Result<NodeMessage, ApiNodeError> {
+        match self.storage.delete(reqeust.message_id) {
+            Ok(()) => (),
+            Err(e) => return Err(ApiNodeError::StorageError(e)),
+        };
+        let response = DeleteResponse::Success;
+        Ok(NodeMessage::DeleteResponse(response))
+    }
+
+    fn get_sign_fsm(&self, message: &[u8]) -> Result<FSM, ApiNodeError> {
+        let sign_initial_state = sign::InitializingBuilder::try_from(self.dkg.clone())
+            .map_err(ApiNodeError::SignatureError)?
+            .with_message(message.into())
+            .with_secret(self.secret.clone())
+            .build()
+            .map_err(ApiNodeError::SignatureError)?;
+
+        Ok(StateMachine::new(
+            Box::new(sign_initial_state),
+            Feed::new(self.nodes_input.subscribe(), self.public_key.clone()),
+            self.nodes_output.clone(),
+            self.id,
+            self.public_key.clone(),
+        ))
+    }
+}
+
+type FSM = StateMachine<SignTypes, tokio::sync::broadcast::Receiver<MessageWrapper<SignMessage>>>;
+
+pub enum ApiNodeError {
+    AsyncRuntimeError(std::io::Error),
+    InvalidMessageId(std::array::TryFromSliceError),
+    IotaError(iota_client::Error),
+    MissingPayload(MessageId),
+    UnsupportedPayload,
+    StorageError(anyhow::Error),
+    SignatureError(anyhow::Error),
+}
+
+impl From<std::io::Error> for ApiNodeError {
+    fn from(value: std::io::Error) -> Self {
+        Self::AsyncRuntimeError(value)
+    }
+}
+
+impl From<std::array::TryFromSliceError> for ApiNodeError {
+    fn from(value: std::array::TryFromSliceError) -> Self {
+        Self::InvalidMessageId(value)
+    }
+}
+
+impl From<iota_client::Error> for ApiNodeError {
+    fn from(value: iota_client::Error) -> Self {
+        Self::IotaError(value)
+    }
 }
