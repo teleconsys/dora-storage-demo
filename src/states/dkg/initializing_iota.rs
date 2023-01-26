@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use anyhow::Error;
+use anyhow::{Error, Result};
 use kyber_rs::{
     group::edwards25519::{Point, SuiteEd25519},
     share::dkg::rabin::new_dist_key_generator,
@@ -14,68 +14,54 @@ use crate::{
 
 use super::{processing_deals::ProcessingDeals, DkgMessage, DkgTypes};
 
-pub struct Initializing {
+pub struct InitializingIota {
     key: Pair<Point>,
-    did_url: Option<String>,
     num_participants: usize,
     public_keys: Vec<Point>,
     did_urls: Vec<String>,
 }
 
-impl Display for Initializing {
+impl Display for InitializingIota {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!("Initializing (nodes: {})", self.num_participants))
     }
 }
 
-impl Initializing {
-    pub fn new(key: Pair<Point>, did_url: Option<String>, num_participants: usize) -> Initializing {
+impl InitializingIota {
+    pub fn new(
+        key: Pair<Point>,
+        own_did_url: String,
+        peers_did_urls: Vec<String>,
+        num_participants: usize,
+    ) -> Result<InitializingIota> {
         let mut public_keys = Vec::with_capacity(num_participants);
         public_keys.push(key.public.clone());
-        let mut did_urls = Vec::with_capacity(num_participants);
-        if let Some(url) = did_url.clone() {
-            did_urls.push(url)
-        };
-        Self {
+        for url in peers_did_urls.clone() {
+            public_keys.push(resolve_document(url)?.public_key()?);
+        }
+        let mut did_urls = peers_did_urls;
+        did_urls.push(own_did_url);
+        Ok(Self {
             key,
-            did_url,
             num_participants,
             public_keys,
             did_urls,
-        }
+        })
     }
 }
 
-impl State<DkgTypes> for Initializing {
+impl State<DkgTypes> for InitializingIota {
     fn initialize(&self) -> Vec<DkgMessage> {
-        match &self.did_url {
-            Some(url) => vec![DkgMessage::DIDUrl(url.to_string())],
-            None => vec![DkgMessage::PublicKey(self.key.public.clone())],
-        }
+        vec![]
     }
 
     fn deliver(&mut self, message: DkgMessage) -> DeliveryStatus<DkgMessage> {
-        match message {
-            DkgMessage::PublicKey(k) => {
-                if self.did_url.is_none() {
-                    self.public_keys.push(k);
-                }
-                DeliveryStatus::Delivered
-            }
-            DkgMessage::DIDUrl(did_url) => {
-                self.did_urls.push(did_url.clone());
-                self.public_keys
-                    .push(resolve_document(did_url).unwrap().public_key().unwrap());
-                DeliveryStatus::Delivered
-            }
-            m => DeliveryStatus::Unexpected(m),
-        }
+        let m = message;
+        DeliveryStatus::Unexpected(m)
     }
 
     fn advance(&mut self) -> Result<Transition<DkgTypes>, Error> {
-        if self.public_keys.len() == self.num_participants
-            || self.did_urls.len() == self.num_participants
-        {
+        if self.public_keys.len() == self.num_participants {
             let mut public_keys = self.public_keys.clone();
             public_keys.sort_by_key(|pk| pk.to_string());
             let dkg = new_dist_key_generator(

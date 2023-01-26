@@ -56,7 +56,7 @@ impl State<DkgTypes> for ProcessingReconstructCommits {
         }
     }
 
-    fn advance(&self) -> Result<Transition<DkgTypes>, anyhow::Error> {
+    fn advance(&mut self) -> Result<Transition<DkgTypes>, anyhow::Error> {
         match self.dkg.dist_key_share() {
             Ok(_) => Ok(Transition::Terminal(DkgTerminalStates::Completed {
                 dkg: self.dkg.clone(),

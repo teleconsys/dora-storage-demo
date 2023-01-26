@@ -90,11 +90,16 @@ pub struct IotaListenRelay<T, S: Sender<T>> {
 }
 
 impl<T: DeserializeOwned + Display, S: Sender<T> + 'static> IotaListenRelay<T, S> {
-    pub fn new(output: S, is_closed: Arc<AtomicBool>, indexes: Vec<String>, network: String) -> Self {
+    pub fn new(
+        output: S,
+        is_closed: Arc<AtomicBool>,
+        indexes: Vec<String>,
+        network: String,
+    ) -> Self {
         let net = match network.as_str() {
             "iota-main" => Network::Mainnet,
             "iota-dev" => Network::Devnet,
-            _ => panic!("unsupported network"), 
+            _ => panic!("unsupported network"),
         };
         Self {
             output,
@@ -191,7 +196,7 @@ impl<T: Serialize, R: Receiver<T>> IotaBroadcastRelay<T, R> {
         let net = match network.as_str() {
             "iota-main" => Network::Mainnet,
             "iota-dev" => Network::Devnet,
-            _ => panic!("unsupported network"), 
+            _ => panic!("unsupported network"),
         };
         let publisher = Publisher::new(net)?;
         Ok(IotaBroadcastRelay {

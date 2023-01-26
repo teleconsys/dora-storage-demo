@@ -49,10 +49,12 @@ pub struct NodeArgs {
 
     #[arg(long = "did-network", default_value = None)]
     did_network: Option<String>,
+
+    #[arg(long = "signature-sleep-time", default_value = "5")]
+    signature_sleep_time: u64,
 }
 
 pub fn run_node(args: NodeArgs) -> Result<()> {
-
     let mut storage = None;
     if let Some(strg) = args.storage {
         println!("Setting up storage... ");
@@ -100,7 +102,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
 
     let sign_listen_relay = ListenRelay::new(
         args.host.with_port(args.host.port() - 1000),
-        sign_input_channel_sender,
+        sign_input_channel_sender.clone(),
         is_completed.clone(),
     );
     let mut sign_broadcast_relay = BroadcastRelay::new(
@@ -137,14 +139,21 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
         );
     }
 
-    let (_signature, _public_key) = node.run(storage, args.did_network, did_url, 3)?;
+    let (_signature, _public_key) = node.run(
+        storage,
+        args.did_network,
+        did_url,
+        3,
+        sign_input_channel_sender,
+        args.signature_sleep_time,
+    )?;
 
     is_completed.store(true, Ordering::SeqCst);
 
-    dkg_broadcast_relay_handle.join().unwrap()?;
-    dkg_listen_relay_handle.join().unwrap()?;
-    sign_broadcast_relay_handle.join().unwrap()?;
-    sign_listen_relay_handle.join().unwrap()?;
+    // dkg_broadcast_relay_handle.join().unwrap()?;
+    // dkg_listen_relay_handle.join().unwrap()?;
+    // sign_broadcast_relay_handle.join().unwrap()?;
+    // sign_listen_relay_handle.join().unwrap()?;
 
     //println!("Public key: {:?}", public_key);
     //println!("Signature: {}", signature);

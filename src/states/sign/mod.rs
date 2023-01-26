@@ -5,6 +5,7 @@ use crate::states::fsm::StateMachineTypes;
 mod initializing;
 mod messages;
 
+use kyber_rs::group::edwards25519::Point;
 pub use messages::SignMessage;
 
 pub use initializing::Initializing;
@@ -44,5 +45,6 @@ impl Display for Signature {
 }
 
 pub enum SignTerminalStates {
-    Completed(Signature),
+    Completed(Signature, Vec<Point>, Vec<Point>),
+    Failed,
 }

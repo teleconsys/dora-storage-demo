@@ -23,7 +23,7 @@ use api::routes::AppData;
 use clap::Parser;
 use demo::{
     run::{run_node, NodeArgs},
-    run_iota::{IotaNodeArgs, self},
+    run_iota::{self, IotaNodeArgs},
 };
 
 use net::host::Host;

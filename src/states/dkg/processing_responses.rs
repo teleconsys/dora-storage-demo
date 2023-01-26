@@ -72,7 +72,7 @@ impl State<DkgTypes> for ProcessingResponses {
         }
     }
 
-    fn advance(&self) -> Result<Transition<DkgTypes>, Error> {
+    fn advance(&mut self) -> Result<Transition<DkgTypes>, Error> {
         let number_of_other_nodes = self.dkg.participants.len() - 1;
         if self.optional_justifications.len() == number_of_other_nodes * number_of_other_nodes {
             return Ok(Transition::Next(Box::new(ProcessingJustifications::new(

@@ -53,9 +53,10 @@ services:
         condition: service_started
     command:
       - "iota-node"
-      - "dora-node-2"
-      - "dora-node-3"
-      - "--index=dora-node-1"
+      - "--governor=dora-governor-test"
+      - "--nodes-number=3"
+      - "--time-resolution=20"
+      - "--signature-sleep-time=20"
       - "--storage=minio-local"
       - "--storage-endpoint=minio-1:9000"
       - "--storage-access-key=admin"
@@ -74,9 +75,10 @@ services:
         condition: service_started
     command:
       - "iota-node"
-      - "dora-node-1"
-      - "dora-node-3"
-      - "--index=dora-node-2"
+      - "--governor=dora-governor-test"
+      - "--nodes-number=3"
+      - "--time-resolution=20"
+      - "--signature-sleep-time=20"
       - "--storage=minio-local"
       - "--storage-endpoint=minio-2:9000"
       - "--storage-access-key=admin"
@@ -95,9 +97,10 @@ services:
         condition: service_started
     command:
       - "iota-node"
-      - "dora-node-2"
-      - "dora-node-1"
-      - "--index=dora-node-3"
+      - "--governor=dora-governor-test"
+      - "--nodes-number=3"
+      - "--time-resolution=20"
+      - "--signature-sleep-time=20"
       - "--storage=minio-local"
       - "--storage-endpoint=minio-3:9000"
       - "--storage-access-key=admin"
