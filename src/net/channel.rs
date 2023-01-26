@@ -41,9 +41,21 @@ impl<T> Receiver<T> for std::sync::mpsc::Receiver<T> {
         rec.recv().map_err(|e| e.into())
     }
 }
+impl<T> Receiver<T> for &std::sync::mpsc::Receiver<T> {
+    fn recv(&mut self) -> Result<T, RecvError> {
+        let rec: &std::sync::mpsc::Receiver<T> = self;
+        rec.recv().map_err(|e| e.into())
+    }
+}
 impl<T: Clone> Receiver<T> for tokio::sync::broadcast::Receiver<T> {
     fn recv(&mut self) -> Result<T, RecvError> {
         futures::executor::block_on(self.recv()).map_err(|e| e.into())
+    }
+}
+impl<T: Clone> Receiver<T> for &mut tokio::sync::broadcast::Receiver<T> {
+    fn recv(&mut self) -> Result<T, RecvError> {
+        futures::executor::block_on(tokio::sync::broadcast::Receiver::<T>::recv(*self))
+            .map_err(|e| e.into())
     }
 }
 

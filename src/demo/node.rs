@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::sync::mpsc::{Receiver, Sender};
 
 use crate::api::routes::delete::{DeleteRequest, DeleteResponse};
@@ -6,13 +7,16 @@ use crate::api::routes::save::{StoreError, StoreRequest, StoreResponse};
 use crate::api::routes::NodeMessage;
 use crate::did::{new_document, resolve_document};
 use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates, Initializing};
+use crate::dlt::iota::{Listener, Publisher};
 use crate::net::broadcast::LocalBroadcast;
 use crate::states::dkg::InitializingIota;
 use crate::states::feed::{Feed, MessageWrapper};
 use crate::states::fsm::{StateMachine, StateMachineTypes};
 use crate::store::Storage;
 use anyhow::bail;
-use identity_iota::iota_core::{self, MessageId};
+use enum_display::EnumDisplay;
+use identity_iota::iota_core::MessageId;
+use identity_iota::iota_core::Network;
 use iota_client::Client;
 use kyber_rs::encoding::BinaryMarshaler;
 use kyber_rs::group::edwards25519::{Scalar, SuiteEd25519};
@@ -82,11 +86,13 @@ impl Node {
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
-        let dkg_initial_state = Initializing::new(self.keypair, did_url, num_participants);
+        let dkg_initial_state =
+            Initializing::new(self.keypair.clone(), did_url.clone(), num_participants);
+        let dkg_feed = Feed::new(&self.dkg_input_channel, public.clone());
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
-            Feed::new(self.dkg_input_channel, public.clone()),
-            self.dkg_output_channel,
+            dkg_feed,
+            &self.dkg_output_channel,
             self.id,
             public.clone(),
         );
@@ -109,17 +115,18 @@ impl Node {
             nodes_dids,
         )?;
 
-        let sign_initial_state = sign::InitializingBuilder::try_from(dkg)?
+        let sign_initial_state = sign::InitializingBuilder::try_from(dkg.clone())?
             .with_message(document.to_bytes()?)
             .with_secret(secret)
             .with_sender(signature_sender)
             .with_sleep_time(signature_sleep_time)
             .build()?;
 
+        let sign_feed = Feed::new(&self.sign_input_channel, public.clone());
         let mut sign_fsm = StateMachine::new(
             Box::new(sign_initial_state),
-            Feed::new(self.sign_input_channel, public.clone()),
-            self.sign_output_channel,
+            sign_feed,
+            &self.sign_output_channel,
             self.id,
             public,
         );
@@ -162,12 +169,16 @@ impl Node {
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
-        let dkg_initial_state =
-            InitializingIota::new(self.keypair, own_did_url, did_urls, num_participants)?;
+        let dkg_initial_state = InitializingIota::new(
+            self.keypair.clone(),
+            own_did_url,
+            did_urls,
+            num_participants,
+        )?;
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
-            Feed::new(self.dkg_input_channel, public.clone()),
-            self.dkg_output_channel,
+            Feed::new(&self.dkg_input_channel, public.clone()),
+            &self.dkg_output_channel,
             self.id,
             public.clone(),
         );
@@ -183,7 +194,7 @@ impl Node {
             Some(did_urls.clone()),
         )?;
 
-        let sign_initial_state = sign::InitializingBuilder::try_from(dkg)?
+        let sign_initial_state = sign::InitializingBuilder::try_from(dkg.clone())?
             .with_message(document.to_bytes()?)
             .with_secret(secret)
             .with_sender(signature_sender)
@@ -192,8 +203,8 @@ impl Node {
 
         let mut sign_fsm = StateMachine::new(
             Box::new(sign_initial_state),
-            Feed::new(self.sign_input_channel, public.clone()),
-            self.sign_output_channel,
+            Feed::new(&self.sign_input_channel, public.clone()),
+            &self.sign_output_channel,
             self.id,
             public,
         );
@@ -227,16 +238,67 @@ impl Node {
 
             let resolved_did = resolve_document(did_url.clone())?;
 
-            if let Some(strg) = storage {
-                strg.put(did_url, &resolved_did.to_bytes()?)?;
+            if let Some(ref strg) = storage {
+                strg.put(did_url.clone(), &resolved_did.to_bytes()?)?;
             }
-
+            self.run_api_node(did_url, storage, dkg)?;
             Ok((signature, dist_pub_key))
         } else {
             let did_url = document.did_url();
             log::info!("Could not sign committee's DID, DID URL: {}", did_url);
             Ok((Signature::from(vec![]), dist_pub_key))
         }
+    }
+
+    fn run_api_node(
+        &self,
+        did_url: String,
+        storage: Option<Storage>,
+        dkg: DistKeyGenerator<SuiteEd25519>,
+    ) -> Result<(), anyhow::Error> {
+        let api_index = did_url.split(":").last().unwrap();
+        let mut api_input = Listener::new(Network::Devnet)?;
+        let api_output = Publisher::new(Network::Devnet)?;
+        let api_node = ApiNode {
+            storage: storage.unwrap(),
+            iota_client: crate::dlt::iota::client::iota_client("dev")?,
+            dkg,
+            secret: self.keypair.private.clone(),
+            public_key: self.keypair.public.clone(),
+            id: self.id,
+            nodes_input: todo!(),
+            nodes_output: todo!(),
+        };
+        let rt = tokio::runtime::Runtime::new()?;
+        log::info!("Listening for committee requests on index: {}", api_index);
+        for message_data in rt.block_on(api_input.start(api_index.to_owned()))? {
+            let message = match serde_json::from_slice(&message_data) {
+                Ok(m) => m,
+                Err(e) => {
+                    log::error!("Received bad request: {}", e);
+                    continue;
+                }
+            };
+            log::info!("Received committee request: {:?}", message);
+            let response = match api_node
+                .handle_message(message, &self.sign_input_channel, &self.sign_output_channel)
+                .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("Could not handle request: {}", e);
+                    continue;
+                }
+            };
+            if let Some(response) = response {
+                let encoded = serde_json::to_vec(&response)?;
+                match rt.block_on(api_output.publish(&encoded, Some(api_index.to_owned()))) {
+                    Ok(i) => log::info!("Published response on: {}", i),
+                    Err(e) => log::error!("Could not publish response: {}", e),
+                };
+            }
+        }
+        Ok(())
     }
 }
 
@@ -250,33 +312,43 @@ fn public_to_did(did_urls: &[String], public_key: Point) -> anyhow::Result<Strin
 }
 
 struct ApiNode {
-    storage: Storage,
-    iota_client: Client,
-    dkg: DistKeyGenerator<SuiteEd25519>,
-    secret: Scalar,
+    pub storage: Storage,
+    pub iota_client: Client,
+    pub dkg: DistKeyGenerator<SuiteEd25519>,
+    pub secret: Scalar,
+    pub public_key: Point,
+    pub id: usize,
     nodes_input: tokio::sync::broadcast::Sender<MessageWrapper<SignMessage>>,
     nodes_output: Sender<MessageWrapper<SignMessage>>,
-    public_key: Point,
-    id: usize,
 }
 
 impl ApiNode {
     pub fn handle_message(
         &self,
         message: NodeMessage,
+        nodes_input: &Receiver<MessageWrapper<SignMessage>>,
+        nodes_output: &Sender<MessageWrapper<SignMessage>>,
     ) -> Result<Option<NodeMessage>, ApiNodeError> {
         match message {
             NodeMessage::StoreRequest(r) => Ok(Some(self.handle_store_request(r)?)),
-            NodeMessage::GetRequest(r) => Ok(Some(self.handle_get_request(r)?)),
+            NodeMessage::GetRequest(r) => Ok(Some(self.handle_get_request(
+                r,
+                nodes_input,
+                nodes_output,
+            )?)),
             NodeMessage::DeleteRequest(r) => Ok(Some(self.handle_delete_request(r)?)),
-            _ => todo!(),
+            m => {
+                log::warn!("Skipping unsupported request: {:?}", m);
+                Ok(None)
+            }
         }
     }
 
     fn handle_store_request(&self, request: StoreRequest) -> Result<NodeMessage, ApiNodeError> {
         let rt = tokio::runtime::Runtime::new()?;
-        let raw_message_id: &[u8; 32] = request.message_id.as_bytes().try_into()?;
-        let message_id = MessageId::from(*raw_message_id);
+
+        let message_id = MessageId::from_str(&request.message_id)
+            .map_err(|e| ApiNodeError::InvalidMessageId(e.into()))?;
         let message = rt.block_on(self.iota_client.get_message().data(&message_id))?;
         let payload = match message.payload() {
             Some(p) => p,
@@ -299,13 +371,22 @@ impl ApiNode {
         }
     }
 
-    fn handle_get_request(&self, request: GetRequest) -> Result<NodeMessage, ApiNodeError> {
+    fn handle_get_request(
+        &self,
+        request: GetRequest,
+        sign_input: &Receiver<MessageWrapper<SignMessage>>,
+        sign_output: &Sender<MessageWrapper<SignMessage>>,
+    ) -> Result<NodeMessage, ApiNodeError> {
         let data = match self.storage.get(request.message_id) {
             Ok(d) => d,
-            Err(e) => return Err(ApiNodeError::StorageError(e)),
+            Err(e) => {
+                return Ok(NodeMessage::GetResponse(GetResponse::Failure(
+                    GetError::CouldNotRetrieveFromStorage(e.to_string()),
+                )))
+            }
         };
 
-        let mut sign_fsm = self.get_sign_fsm(&data)?;
+        let mut sign_fsm = self.get_sign_fsm(&data, sign_input, sign_output)?;
         let final_state = match sign_fsm.run() {
             Ok(state) => state,
             Err(e) => return Err(ApiNodeError::SignatureError(e)),
@@ -338,7 +419,12 @@ impl ApiNode {
         Ok(NodeMessage::DeleteResponse(response))
     }
 
-    fn get_sign_fsm(&self, message: &[u8]) -> Result<FSM, ApiNodeError> {
+    fn get_sign_fsm<'a>(
+        &self,
+        message: &[u8],
+        sign_input: &'a Receiver<MessageWrapper<SignMessage>>,
+        sign_output: &'a Sender<MessageWrapper<SignMessage>>,
+    ) -> Result<FSM<'a>, ApiNodeError> {
         let sign_initial_state = sign::InitializingBuilder::try_from(self.dkg.clone())
             .map_err(ApiNodeError::SignatureError)?
             .with_message(message.into())
@@ -346,21 +432,23 @@ impl ApiNode {
             .build()
             .map_err(ApiNodeError::SignatureError)?;
 
-        Ok(StateMachine::new(
+        let fsm = StateMachine::new(
             Box::new(sign_initial_state),
-            Feed::new(self.nodes_input.subscribe(), self.public_key.clone()),
-            self.nodes_output.clone(),
+            Feed::new(sign_input, self.public_key.clone()),
+            &sign_output,
             self.id,
             self.public_key.clone(),
-        ))
+        );
+        Ok(fsm)
     }
 }
 
-type FSM = StateMachine<SignTypes, tokio::sync::broadcast::Receiver<MessageWrapper<SignMessage>>>;
+type FSM<'a> = StateMachine<'a, SignTypes, &'a Receiver<MessageWrapper<SignMessage>>>;
 
+#[derive(Debug, EnumDisplay)]
 pub enum ApiNodeError {
     AsyncRuntimeError(std::io::Error),
-    InvalidMessageId(std::array::TryFromSliceError),
+    InvalidMessageId(anyhow::Error),
     IotaError(iota_client::Error),
     MissingPayload(MessageId),
     UnsupportedPayload,
@@ -368,15 +456,11 @@ pub enum ApiNodeError {
     SignatureError(anyhow::Error),
 }
 
+impl std::error::Error for ApiNodeError {}
+
 impl From<std::io::Error> for ApiNodeError {
     fn from(value: std::io::Error) -> Self {
         Self::AsyncRuntimeError(value)
-    }
-}
-
-impl From<std::array::TryFromSliceError> for ApiNodeError {
-    fn from(value: std::array::TryFromSliceError) -> Self {
-        Self::InvalidMessageId(value)
     }
 }
 

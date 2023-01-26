@@ -11,6 +11,7 @@ mod store;
 
 use std::{
     net::SocketAddr,
+    str::FromStr,
     sync::{atomic::AtomicBool, Arc, Mutex},
     thread,
 };
@@ -26,8 +27,13 @@ use demo::{
     run_iota::{self, IotaNodeArgs},
 };
 
+use dlt::iota::{client::iota_client, Publisher};
+use identity_iota::iota_core::Network;
 use net::host::Host;
+use s3::request;
 use states::dkg;
+
+use crate::api::routes::NodeMessage;
 
 #[derive(Parser)]
 struct ApiArgs {
@@ -50,6 +56,39 @@ enum Action {
     Node(NodeArgs),
     Api(ApiArgs),
     IotaNode(IotaNodeArgs),
+    ApiSend(ApiSendArgs),
+}
+
+#[derive(Parser)]
+struct ApiSendArgs {
+    #[arg(required = true, long, help = "action")]
+    action: ApiAction,
+
+    #[arg(required = true, long, help = "message id")]
+    message_id: String,
+
+    #[arg(required = true, long, help = "index")]
+    index: String,
+}
+
+#[derive(Clone)]
+enum ApiAction {
+    Store,
+    Get,
+    Delete,
+}
+
+impl FromStr for ApiAction {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "store" => Ok(ApiAction::Store),
+            "get" => Ok(ApiAction::Get),
+            "delete" => Ok(ApiAction::Delete),
+            _ => Err("not a valid action".to_owned()),
+        }
+    }
+
+    type Err = String;
 }
 
 fn main() -> Result<()> {
@@ -60,6 +99,7 @@ fn main() -> Result<()> {
         Action::Node(args) => run_node(args)?,
         Action::Api(args) => run_api(args)?,
         Action::IotaNode(args) => run_iota::run_node(args)?,
+        Action::ApiSend(args) => api_send(args)?,
     }
 
     Ok(())
@@ -101,5 +141,45 @@ fn run_api(args: ApiArgs) -> Result<()> {
     broadcast_handler.join().unwrap();
     listener_handler.join().unwrap();
 
+    Ok(())
+}
+
+fn api_send(args: ApiSendArgs) -> Result<()> {
+    let request = match args.action {
+        ApiAction::Store => {
+            let request = NodeMessage::StoreRequest(api::routes::save::StoreRequest {
+                message_id: args.message_id,
+            });
+            serde_json::to_vec(&request)?
+        }
+        ApiAction::Get => {
+            let request = NodeMessage::GetRequest(api::routes::get::GetRequest {
+                message_id: args.message_id,
+            });
+            serde_json::to_vec(&request)?
+        }
+        ApiAction::Delete => {
+            let request = NodeMessage::DeleteRequest(api::routes::delete::DeleteRequest {
+                message_id: args.message_id,
+            });
+            serde_json::to_vec(&request)?
+        }
+    };
+    let publisher = Publisher::new(Network::Devnet)?;
+    let rt = tokio::runtime::Runtime::new()?;
+    let result = rt.block_on(publisher.publish(&request, Some(args.index)))?;
+    println!("{}", result);
+    Ok(())
+}
+
+#[test]
+fn test_serde() -> Result<()> {
+    let message = NodeMessage::StoreRequest(api::routes::save::StoreRequest {
+        message_id: "asfd".to_owned(),
+    });
+
+    let encoded = serde_json::to_vec(&message)?;
+    let decoded: NodeMessage = serde_json::from_slice(&encoded)?;
+    assert_eq!(message.to_string(), decoded.to_string());
     Ok(())
 }

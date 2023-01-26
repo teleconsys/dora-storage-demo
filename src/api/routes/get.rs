@@ -14,4 +14,5 @@ pub enum GetResponse {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum GetError {
     Message(String),
+    CouldNotRetrieveFromStorage(String),
 }

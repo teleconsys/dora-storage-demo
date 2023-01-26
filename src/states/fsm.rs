@@ -35,25 +35,25 @@ pub trait StateMachineTypes {
     type TerminalStates;
 }
 
-pub struct StateMachine<T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> {
+pub struct StateMachine<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> {
     id: usize,
     key: Point,
     state: BoxedState<T>,
-    message_output: Sender<MessageWrapper<T::Message>>,
+    message_output: &'a Sender<MessageWrapper<T::Message>>,
     message_input: Feed<T::Message, R>,
 }
 
-impl<T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMachine<T, R> {
+impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMachine<'a, T, R> {
     fn log_target(&self) -> String {
         format!("fsm:node_{}", self.id)
     }
     pub fn new<F: Into<Feed<T::Message, R>>>(
         initial_state: BoxedState<T>,
         input_channel: F,
-        output_channel: Sender<MessageWrapper<T::Message>>,
+        output_channel: &'a Sender<MessageWrapper<T::Message>>,
         id: usize,
         key: Point,
-    ) -> StateMachine<T, R> {
+    ) -> StateMachine<'a, T, R> {
         Self {
             id,
             key,
