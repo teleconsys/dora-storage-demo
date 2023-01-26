@@ -159,33 +159,13 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
         id,
     );
 
-    // let (_signature, _public_key) = node.run_iota(
-    //     storage,
-    //     network,
-    //     did_url,
-    //     peers_dids,
-    //     args.nodes_number,
-    //     args.time_resolution,
-    //     sign_input_channel_sender,
-    //     args.signature_sleep_time,
-    // )?;
-    let mut did_url = None;
-    let network = args.did_network.clone();
-    let eddsa = EdDSA::from(keypair);
-    let document = new_document(&eddsa.public.marshal_binary()?, &network, None, None)?;
-    let signature = eddsa.sign(&document.to_bytes()?)?;
-    did_url = Some(document.did_url());
-    document.publish(&signature)?;
-    log::info!(
-        "Node's DID has been published, DID URL: {}",
-        did_url.clone().unwrap()
-    );
-
-    let (_signature, _public_key) = node.run(
+    let (_signature, _public_key) = node.run_iota(
         storage,
-        Some(args.did_network),
+        network,
         did_url,
-        3,
+        peers_dids,
+        args.nodes_number,
+        args.time_resolution,
         sign_input_channel_sender,
         args.signature_sleep_time,
     )?;

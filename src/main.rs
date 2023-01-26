@@ -147,6 +147,7 @@ fn run_api(args: ApiArgs) -> Result<()> {
 fn api_send(args: ApiSendArgs) -> Result<()> {
     let request = match args.action {
         ApiAction::Store => {
+            let message_id = args.message_id.clone();
             let request = NodeMessage::StoreRequest(api::routes::save::StoreRequest {
                 message_id: args.message_id,
             });
@@ -165,7 +166,7 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
             serde_json::to_vec(&request)?
         }
     };
-    let publisher = Publisher::new(Network::Devnet)?;
+    let publisher = Publisher::new(Network::Mainnet)?;
     let rt = tokio::runtime::Runtime::new()?;
     let result = rt.block_on(publisher.publish(&request, Some(args.index)))?;
     println!("{}", result);

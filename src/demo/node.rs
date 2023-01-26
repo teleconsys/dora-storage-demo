@@ -246,6 +246,7 @@ impl Node {
         } else {
             let did_url = document.did_url();
             log::info!("Could not sign committee's DID, DID URL: {}", did_url);
+            self.run_api_node(did_url, storage, dkg)?;
             Ok((Signature::from(vec![]), dist_pub_key))
         }
     }
@@ -257,17 +258,15 @@ impl Node {
         dkg: DistKeyGenerator<SuiteEd25519>,
     ) -> Result<(), anyhow::Error> {
         let api_index = did_url.split(":").last().unwrap();
-        let mut api_input = Listener::new(Network::Devnet)?;
-        let api_output = Publisher::new(Network::Devnet)?;
+        let mut api_input = Listener::new(Network::Mainnet)?;
+        let api_output = Publisher::new(Network::Mainnet)?;
         let api_node = ApiNode {
             storage: storage.unwrap(),
-            iota_client: crate::dlt::iota::client::iota_client("dev")?,
+            iota_client: crate::dlt::iota::client::iota_client("main")?,
             dkg,
             secret: self.keypair.private.clone(),
             public_key: self.keypair.public.clone(),
             id: self.id,
-            nodes_input: todo!(),
-            nodes_output: todo!(),
         };
         let rt = tokio::runtime::Runtime::new()?;
         log::info!("Listening for committee requests on index: {}", api_index);
@@ -318,8 +317,6 @@ struct ApiNode {
     pub secret: Scalar,
     pub public_key: Point,
     pub id: usize,
-    nodes_input: tokio::sync::broadcast::Sender<MessageWrapper<SignMessage>>,
-    nodes_output: Sender<MessageWrapper<SignMessage>>,
 }
 
 impl ApiNode {

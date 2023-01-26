@@ -225,13 +225,9 @@ impl<T: Serialize, R: Receiver<T>> IotaBroadcastRelay<T, R> {
 
             let network = self.network.clone();
             let index = self.index.clone();
-            std::thread::spawn(move || {
-                let publisher = Publisher::new(network).unwrap();
-                tokio::runtime::Runtime::new()
-                    .unwrap()
-                    .block_on(publisher.publish(serialized.as_bytes(), Some(index)))
-                    .unwrap()
-            });
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(self.publisher.publish(serialized.as_bytes(), Some(index)))?;
         }
     }
 }
