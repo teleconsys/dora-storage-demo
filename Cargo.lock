@@ -1223,6 +1223,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "anyhow",
+ "bincode",
  "clap 4.0.32",
  "colored 2.0.0",
  "enum-display",

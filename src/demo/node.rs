@@ -15,12 +15,15 @@ use crate::states::fsm::{StateMachine, StateMachineTypes};
 use crate::store::Storage;
 use anyhow::bail;
 use enum_display::EnumDisplay;
+use identity_iota::core::ToJson;
 use identity_iota::iota_core::MessageId;
 use identity_iota::iota_core::Network;
 use iota_client::Client;
-use kyber_rs::encoding::BinaryMarshaler;
+use kyber_rs::encoding::{BinaryMarshaler, Marshaling, MarshallingError};
 use kyber_rs::group::edwards25519::{Scalar, SuiteEd25519};
 use kyber_rs::share::dkg::rabin::DistKeyGenerator;
+use kyber_rs::sign::eddsa::{self, EdDSA};
+use serde::{Deserialize, Serialize};
 
 use crate::states::sign::{self, SignMessage, SignTerminalStates, SignTypes, Signature};
 use kyber_rs::{group::edwards25519::Point, util::key::Pair};
@@ -86,8 +89,7 @@ impl Node {
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
-        let dkg_initial_state =
-            Initializing::new(self.keypair.clone(), did_url, num_participants);
+        let dkg_initial_state = Initializing::new(self.keypair.clone(), did_url, num_participants);
         let dkg_feed = Feed::new(&self.dkg_input_channel, public.clone());
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
@@ -171,7 +173,7 @@ impl Node {
         let public = self.keypair.public.clone();
         let dkg_initial_state = InitializingIota::new(
             self.keypair.clone(),
-            own_did_url,
+            own_did_url.clone(),
             did_urls,
             num_participants,
         )?;
@@ -211,6 +213,12 @@ impl Node {
 
         let sign_terminal_state = sign_fsm.run()?;
 
+        let did_url = document.did_url();
+
+        // Create a iota signature logger
+        let iota_logger =
+            new_node_signature_logger(did_url.clone(), did_network.clone(), self.keypair.clone());
+
         if let SignTerminalStates::Completed(signature, processed_partial_owners, bad_signers) =
             sign_terminal_state
         {
@@ -220,7 +228,7 @@ impl Node {
                 working_nodes.push(public_to_did(&did_urls, owner)?);
             }
             let mut absent_nodes = did_urls.clone();
-            for worker in working_nodes {
+            for worker in working_nodes.clone() {
                 absent_nodes.retain(|x| *x != worker);
             }
 
@@ -229,24 +237,45 @@ impl Node {
             for owner in bad_signers {
                 bad_signers_nodes.push(public_to_did(&did_urls, owner)?);
             }
+
+            // Publish DKG signature log
             log::info!("Signature success. Nodes that didn't participate: {:?}. Nodes that didn't provide a correct signature: {:?}", absent_nodes, bad_signers_nodes);
+            let mut dkg_log = new_signature_log(
+                "Initialization DKG".to_string(),
+                own_did_url.clone(),
+                absent_nodes,
+                bad_signers_nodes,
+                vec![],
+            );
+            iota_logger.publish(&mut dkg_log)?;
 
-            // Publish signed DID
-            let did_url = document.did_url();
-            document.publish(&signature.to_vec())?;
-            log::info!("Committee's DID has been published, DID URL: {}", did_url);
-
-            let resolved_did = resolve_document(did_url.clone())?;
-
-            if let Some(ref strg) = storage {
-                strg.put(did_url.clone(), &resolved_did.to_bytes()?)?;
+            // Publish signed DID if the node is the first on the list
+            working_nodes.sort();
+            if own_did_url == working_nodes[0] {
+                document.publish(&signature.to_vec())?;
+                log::info!("Committee's DID has been published, DID URL: {}", did_url);
+                //let resolved_did = resolve_document(did_url.clone())?;
             }
-            self.run_api_node(did_url, storage, dkg, did_network, signature_sender, signature_sleep_time)?;
+
+            self.run_api_node(
+                did_url,
+                storage,
+                dkg,
+                did_network,
+                signature_sender,
+                signature_sleep_time,
+            )?;
             Ok((signature, dist_pub_key))
         } else {
-            let did_url = document.did_url();
             log::info!("Could not sign committee's DID, DID URL: {}", did_url);
-            self.run_api_node(did_url, storage, dkg, did_network, signature_sender, signature_sleep_time)?;
+            self.run_api_node(
+                did_url,
+                storage,
+                dkg,
+                did_network,
+                signature_sender,
+                signature_sleep_time,
+            )?;
             Ok((Signature::from(vec![]), dist_pub_key))
         }
     }
@@ -263,7 +292,7 @@ impl Node {
         let network = match network_name.as_str() {
             "iota-main" => Network::Mainnet,
             "iota-dev" => Network::Devnet,
-            _ => panic!("unsupported network")
+            _ => panic!("unsupported network"),
         };
         let api_index = did_url.split(':').last().unwrap();
         let mut api_input = Listener::new(network.clone())?;
@@ -276,7 +305,7 @@ impl Node {
             public_key: self.keypair.public.clone(),
             id: self.id,
             signature_sender,
-            signature_sleep_time
+            signature_sleep_time,
         };
         let rt = tokio::runtime::Runtime::new()?;
         log::info!("Listening for committee requests on index: {}", api_index);
@@ -470,7 +499,7 @@ pub enum ApiNodeError {
     UnsupportedPayload,
     StorageError(anyhow::Error),
     SignatureError(anyhow::Error),
-    ConversionError(Utf8Error)
+    ConversionError(Utf8Error),
 }
 
 impl std::error::Error for ApiNodeError {}
@@ -484,5 +513,87 @@ impl From<std::io::Error> for ApiNodeError {
 impl From<iota_client::Error> for ApiNodeError {
     fn from(value: iota_client::Error) -> Self {
         Self::IotaError(value)
+    }
+}
+
+#[derive(Clone)]
+pub struct NodeSignatureLogger {
+    committee_index: String,
+    network: String,
+    keypair: Pair<Point>,
+}
+
+pub fn new_node_signature_logger(
+    committee_did_url: String,
+    network: String,
+    keypair: Pair<Point>,
+) -> NodeSignatureLogger {
+    NodeSignatureLogger {
+        committee_index: committee_did_url.split(':').last().unwrap().to_string(),
+        network,
+        keypair,
+    }
+}
+
+impl NodeSignatureLogger {
+    pub fn publish(&self, log: &mut NodeSignatureLog) -> anyhow::Result<()> {
+        let network = match self.network.as_str() {
+            "iota-main" => Network::Mainnet,
+            "iota-dev" => Network::Devnet,
+            _ => panic!("unsupported network"),
+        };
+        let publisher = Publisher::new(network)?;
+        self.sign_log(log)?;
+
+        let msg_id = tokio::runtime::Runtime::new()?
+            .block_on(publisher.publish(&log.to_jcs()?, Some(self.committee_index.clone())))?;
+        log::info!("Log published (msg_id: {})", msg_id);
+        Ok(())
+    }
+
+    fn sign_log(&self, log: &mut NodeSignatureLog) -> anyhow::Result<()> {
+        let eddsa = EdDSA::from(self.keypair.clone());
+        log.add_signature(&eddsa.sign(&log.to_bytes()?)?);
+        Ok(())
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct NodeSignatureLog {
+    session_id: String,
+    sender: String,
+    absent_nodes: Vec<String>,
+    bad_signers: Vec<String>,
+    signature: Vec<u8>,
+}
+
+pub fn new_signature_log(
+    session_id: String,
+    sender: String,
+    absent_nodes: Vec<String>,
+    bad_signers: Vec<String>,
+    signature: Vec<u8>,
+) -> NodeSignatureLog {
+    NodeSignatureLog {
+        session_id,
+        sender,
+        absent_nodes,
+        bad_signers,
+        signature,
+    }
+}
+
+impl NodeSignatureLog {
+    fn add_signature(&mut self, signature: &[u8]) {
+        self.signature = signature.to_vec();
+    }
+
+    fn to_bytes(&self) -> anyhow::Result<Vec<u8>> {
+        match bincode::serialize(self) {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                bail!(MarshallingError::Serialization(e))
+            }
+        }
     }
 }

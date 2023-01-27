@@ -97,13 +97,11 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     // peers dids to indexes
     let mut peers_indexes = Vec::new();
     for peer in peers_dids.clone() {
-        let tmp: Vec<&str> = peer.split(':').collect();
-        peers_indexes.push(tmp[tmp.len() - 1].to_string());
+        peers_indexes.push(peer.split(':').last().unwrap().to_string());
     }
 
     // own did to indexes
-    let tmp: Vec<&str> = did_url.split(':').collect();
-    let own_idx = tmp[tmp.len() - 1].to_string();
+    let own_idx = did_url.split(':').last().unwrap().to_string();
 
     let (dkg_input_channel_sender, dkg_input_channel) = mpsc::channel();
     let (dkg_output_channel, dkg_output_channel_receiver) = mpsc::channel();
