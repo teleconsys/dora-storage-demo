@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast::error::{RecvError, SendError};
 use tokio::sync::broadcast::{Receiver, Sender};
 
+use self::delete::{DeleteRequest, DeleteResponse};
+use self::get::{GetRequest, GetResponse};
+use self::save::{StoreRequest, StoreResponse};
+
 pub mod delete;
 pub mod get;
 pub mod save;
@@ -17,8 +21,12 @@ pub struct AppData {
 
 #[derive(Clone, Debug, EnumDisplay, Serialize, Deserialize)]
 pub enum NodeMessage {
-    SaveRequest(String),
-    SaveResponse(String),
+    StoreRequest(StoreRequest),
+    StoreResponse(StoreResponse),
+    GetRequest(GetRequest),
+    GetResponse(GetResponse),
+    DeleteRequest(DeleteRequest),
+    DeleteResponse(DeleteResponse),
 }
 
 pub async fn listen_for_message<T: Clone, F: Fn(T) -> Option<T>>(

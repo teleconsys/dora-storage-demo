@@ -188,6 +188,7 @@ pub struct IotaBroadcastRelay<T, R: Receiver<T>> {
     input: R,
     index: String,
     publisher: Publisher,
+    network: Network,
     _phantom: PhantomData<T>,
 }
 
@@ -198,11 +199,12 @@ impl<T: Serialize, R: Receiver<T>> IotaBroadcastRelay<T, R> {
             "iota-dev" => Network::Devnet,
             _ => panic!("unsupported network"),
         };
-        let publisher = Publisher::new(net)?;
+        let publisher = Publisher::new(net.clone())?;
         Ok(IotaBroadcastRelay {
             input,
             index,
             publisher,
+            network: net,
             _phantom: PhantomData,
         })
     }
@@ -215,16 +217,17 @@ impl<T: Serialize, R: Receiver<T>> IotaBroadcastRelay<T, R> {
                 .input
                 .recv()
                 .map_err(|e| Error::msg(format!("{:?}", e)))?;
-            log::trace!(
-                "Relaying message: {:?}",
-                serde_json::to_string(&message).unwrap()
-            );
+            // log::trace!(
+            // "Relaying message: {:?}",
+            // serde_json::to_string(&message).unwrap()
+            // );
             let serialized = serde_json::to_string(&message)?;
 
-            let _message_id = tokio::runtime::Runtime::new()?.block_on(
-                self.publisher
-                    .publish(serialized.as_bytes(), Some(self.index.clone())),
-            )?;
+            let network = self.network.clone();
+            let index = self.index.clone();
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(self.publisher.publish(serialized.as_bytes(), Some(index)))?;
         }
     }
 }

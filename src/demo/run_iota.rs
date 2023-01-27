@@ -151,7 +151,7 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     }
 
     let node = Node::new(
-        keypair,
+        keypair.clone(),
         dkg_input_channel,
         dkg_output_channel,
         sign_input_channel,

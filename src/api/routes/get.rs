@@ -1,15 +1,18 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetRequest {
-    message_id: String,
+    pub message_id: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum GetResponse {
-    Success { signature: Vec<u8>, data: Vec<u8> },
+    Success { data: String, signature: Vec<u8> },
     Failure(GetError),
 }
 
-#[derive(Serialize, Deserialize)]
-pub enum GetError {}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GetError {
+    Message(String),
+    CouldNotRetrieveFromStorage(String),
+}
