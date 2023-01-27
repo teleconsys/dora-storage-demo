@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::str::{FromStr, Utf8Error};
 use std::sync::mpsc::{Receiver, Sender};
 
 use crate::api::routes::delete::{DeleteRequest, DeleteResponse};
@@ -87,7 +87,7 @@ impl Node {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
         let dkg_initial_state =
-            Initializing::new(self.keypair.clone(), did_url.clone(), num_participants);
+            Initializing::new(self.keypair.clone(), did_url, num_participants);
         let dkg_feed = Feed::new(&self.dkg_input_channel, public.clone());
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
@@ -115,7 +115,7 @@ impl Node {
             nodes_dids,
         )?;
 
-        let sign_initial_state = sign::InitializingBuilder::try_from(dkg.clone())?
+        let sign_initial_state = sign::InitializingBuilder::try_from(dkg)?
             .with_message(document.to_bytes()?)
             .with_secret(secret)
             .with_sender(signature_sender)
@@ -197,7 +197,7 @@ impl Node {
         let sign_initial_state = sign::InitializingBuilder::try_from(dkg.clone())?
             .with_message(document.to_bytes()?)
             .with_secret(secret)
-            .with_sender(signature_sender)
+            .with_sender(signature_sender.clone())
             .with_sleep_time(signature_sleep_time)
             .build()?;
 
@@ -241,12 +241,12 @@ impl Node {
             if let Some(ref strg) = storage {
                 strg.put(did_url.clone(), &resolved_did.to_bytes()?)?;
             }
-            self.run_api_node(did_url, storage, dkg)?;
+            self.run_api_node(did_url, storage, dkg, did_network, signature_sender, signature_sleep_time)?;
             Ok((signature, dist_pub_key))
         } else {
             let did_url = document.did_url();
             log::info!("Could not sign committee's DID, DID URL: {}", did_url);
-            self.run_api_node(did_url, storage, dkg)?;
+            self.run_api_node(did_url, storage, dkg, did_network, signature_sender, signature_sleep_time)?;
             Ok((Signature::from(vec![]), dist_pub_key))
         }
     }
@@ -256,17 +256,27 @@ impl Node {
         did_url: String,
         storage: Option<Storage>,
         dkg: DistKeyGenerator<SuiteEd25519>,
+        network_name: String,
+        signature_sender: Sender<MessageWrapper<SignMessage>>,
+        signature_sleep_time: u64,
     ) -> Result<(), anyhow::Error> {
-        let api_index = did_url.split(":").last().unwrap();
-        let mut api_input = Listener::new(Network::Mainnet)?;
-        let api_output = Publisher::new(Network::Mainnet)?;
+        let network = match network_name.as_str() {
+            "iota-main" => Network::Mainnet,
+            "iota-dev" => Network::Devnet,
+            _ => panic!("unsupported network")
+        };
+        let api_index = did_url.split(':').last().unwrap();
+        let mut api_input = Listener::new(network.clone())?;
+        let api_output = Publisher::new(network.clone())?;
         let api_node = ApiNode {
             storage: storage.unwrap(),
-            iota_client: crate::dlt::iota::client::iota_client("main")?,
+            iota_client: crate::dlt::iota::client::iota_client(network.name_str())?,
             dkg,
             secret: self.keypair.private.clone(),
             public_key: self.keypair.public.clone(),
             id: self.id,
+            signature_sender,
+            signature_sleep_time
         };
         let rt = tokio::runtime::Runtime::new()?;
         log::info!("Listening for committee requests on index: {}", api_index);
@@ -317,6 +327,8 @@ struct ApiNode {
     pub secret: Scalar,
     pub public_key: Point,
     pub id: usize,
+    signature_sender: Sender<MessageWrapper<SignMessage>>,
+    signature_sleep_time: u64,
 }
 
 impl ApiNode {
@@ -389,11 +401,16 @@ impl ApiNode {
             Err(e) => return Err(ApiNodeError::SignatureError(e)),
         };
 
+        let data_utf8 = match std::str::from_utf8(&data) {
+            Ok(text) => text.to_string(),
+            Err(e) => return Err(ApiNodeError::ConversionError(e)),
+        };
+
         match final_state {
             SignTerminalStates::Completed(signature, ..) => {
                 let response = GetResponse::Success {
+                    data: data_utf8,
                     signature: signature.to_vec(),
-                    data,
                 };
 
                 Ok(NodeMessage::GetResponse(response))
@@ -426,13 +443,15 @@ impl ApiNode {
             .map_err(ApiNodeError::SignatureError)?
             .with_message(message.into())
             .with_secret(self.secret.clone())
+            .with_sender(self.signature_sender.clone())
+            .with_sleep_time(self.signature_sleep_time)
             .build()
             .map_err(ApiNodeError::SignatureError)?;
 
         let fsm = StateMachine::new(
             Box::new(sign_initial_state),
             Feed::new(sign_input, self.public_key.clone()),
-            &sign_output,
+            sign_output,
             self.id,
             self.public_key.clone(),
         );
@@ -451,6 +470,7 @@ pub enum ApiNodeError {
     UnsupportedPayload,
     StorageError(anyhow::Error),
     SignatureError(anyhow::Error),
+    ConversionError(Utf8Error)
 }
 
 impl std::error::Error for ApiNodeError {}

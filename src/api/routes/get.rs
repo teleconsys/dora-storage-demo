@@ -7,7 +7,7 @@ pub struct GetRequest {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum GetResponse {
-    Success { signature: Vec<u8>, data: Vec<u8> },
+    Success { data: String, signature: Vec<u8> },
     Failure(GetError),
 }
 
