@@ -245,7 +245,6 @@ impl Node {
                 own_did_url.clone(),
                 absent_nodes,
                 bad_signers_nodes,
-                vec![],
             );
             iota_logger.publish(&mut dkg_log)?;
 
@@ -572,14 +571,13 @@ pub fn new_signature_log(
     sender: String,
     absent_nodes: Vec<String>,
     bad_signers: Vec<String>,
-    signature: Vec<u8>,
 ) -> NodeSignatureLog {
     NodeSignatureLog {
         session_id,
         sender,
         absent_nodes,
         bad_signers,
-        signature,
+        signature: vec![],
     }
 }
 
