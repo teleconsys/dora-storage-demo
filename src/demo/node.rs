@@ -217,7 +217,7 @@ impl Node {
 
         // Create a iota signature logger
         let iota_logger =
-            new_node_signature_logger(did_url.clone(), did_network.clone(), self.keypair.clone());
+            new_node_signature_logger(own_did_url.clone(), did_url.clone(), did_network.clone(), self.keypair.clone());
 
         if let SignTerminalStates::Completed(signature, processed_partial_owners, bad_signers) =
             sign_terminal_state
@@ -242,7 +242,6 @@ impl Node {
             log::info!("Signature success. Nodes that didn't participate: {:?}. Nodes that didn't provide a correct signature: {:?}", absent_nodes, bad_signers_nodes);
             let mut dkg_log = new_signature_log(
                 "Initialization DKG".to_string(),
-                own_did_url.clone(),
                 absent_nodes,
                 bad_signers_nodes,
             );
@@ -517,17 +516,20 @@ impl From<iota_client::Error> for ApiNodeError {
 
 #[derive(Clone)]
 pub struct NodeSignatureLogger {
+    own_did_url: String,
     committee_index: String,
     network: String,
     keypair: Pair<Point>,
 }
 
 pub fn new_node_signature_logger(
+    own_did_url: String,
     committee_did_url: String,
     network: String,
     keypair: Pair<Point>,
 ) -> NodeSignatureLogger {
     NodeSignatureLogger {
+        own_did_url,
         committee_index: committee_did_url.split(':').last().unwrap().to_string(),
         network,
         keypair,
@@ -552,6 +554,7 @@ impl NodeSignatureLogger {
 
     fn sign_log(&self, log: &mut NodeSignatureLog) -> anyhow::Result<()> {
         let eddsa = EdDSA::from(self.keypair.clone());
+        log.add_sender(&self.own_did_url);
         log.add_signature(&eddsa.sign(&log.to_bytes()?)?);
         Ok(())
     }
@@ -568,13 +571,12 @@ pub struct NodeSignatureLog {
 
 pub fn new_signature_log(
     session_id: String,
-    sender: String,
     absent_nodes: Vec<String>,
     bad_signers: Vec<String>,
 ) -> NodeSignatureLog {
     NodeSignatureLog {
         session_id,
-        sender,
+        sender: "".to_string(),
         absent_nodes,
         bad_signers,
         signature: vec![],
@@ -582,6 +584,10 @@ pub fn new_signature_log(
 }
 
 impl NodeSignatureLog {
+    fn add_sender(&mut self, sender: &str) {
+        self.sender = sender.to_string();
+    }
+
     fn add_signature(&mut self, signature: &[u8]) {
         self.signature = signature.to_vec();
     }
