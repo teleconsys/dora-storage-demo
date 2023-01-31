@@ -12,6 +12,7 @@ use self::save::{StoreRequest, StoreResponse};
 
 pub mod delete;
 pub mod get;
+mod request;
 pub mod save;
 
 pub struct AppData {
