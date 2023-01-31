@@ -4,7 +4,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use crate::api::routes::delete::{DeleteRequest, DeleteResponse};
 use crate::api::routes::get::{GetError, GetRequest, GetResponse};
 use crate::api::routes::save::{StoreError, StoreRequest, StoreResponse};
-use crate::api::routes::NodeMessage;
+use crate::api::routes::{GenericRequest, NodeMessage};
 use crate::did::{new_document, resolve_document};
 use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates, Initializing};
 use crate::dlt::iota::{Listener, Publisher};
@@ -216,8 +216,12 @@ impl Node {
         let did_url = document.did_url();
 
         // Create a iota signature logger
-        let iota_logger =
-            new_node_signature_logger(own_did_url.clone(), did_url.clone(), did_network.clone(), self.keypair.clone());
+        let iota_logger = new_node_signature_logger(
+            own_did_url.clone(),
+            did_url.clone(),
+            did_network.clone(),
+            self.keypair.clone(),
+        );
 
         if let SignTerminalStates::Completed(signature, processed_partial_owners, bad_signers) =
             sign_terminal_state
@@ -308,16 +312,22 @@ impl Node {
         let rt = tokio::runtime::Runtime::new()?;
         log::info!("Listening for committee requests on index: {}", api_index);
         for message_data in rt.block_on(api_input.start(api_index.to_owned()))? {
-            let message = match serde_json::from_slice(&message_data) {
+            let message: GenericRequest = match serde_json::from_slice(&message_data) {
                 Ok(m) => m,
-                Err(e) => {
-                    log::error!("Received bad request: {}", e);
+                Err(_) => {
                     continue;
                 }
             };
-            log::info!("Received committee request: {:?}", message);
+            let request = match message.try_into() {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("could not parse request: {}", e);
+                    continue;
+                }
+            };
+            log::info!("Received committee request: {:?}", request);
             let response = match api_node
-                .handle_message(message, &self.sign_input_channel, &self.sign_output_channel)
+                .handle_message(request, &self.sign_input_channel, &self.sign_output_channel)
                 .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))
             {
                 Ok(r) => r,
