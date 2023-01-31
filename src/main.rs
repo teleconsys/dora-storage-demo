@@ -33,7 +33,12 @@ use net::host::Host;
 use s3::request;
 use states::dkg;
 
-use crate::api::routes::NodeMessage;
+use crate::api::routes::{
+    request::{
+        DoraLocalUri, Execution, InputUri, IotaIndexUri, IotaMessageUri, OutputUri, StorageUri,
+    },
+    GenericRequest, NodeMessage,
+};
 
 #[derive(Parser)]
 struct ApiArgs {
@@ -76,6 +81,8 @@ enum ApiAction {
     Store,
     Get,
     Delete,
+    GenericGet,
+    GenericStore,
 }
 
 impl FromStr for ApiAction {
@@ -84,6 +91,8 @@ impl FromStr for ApiAction {
             "store" => Ok(ApiAction::Store),
             "get" => Ok(ApiAction::Get),
             "delete" => Ok(ApiAction::Delete),
+            "generic-get" => Ok(ApiAction::GenericGet),
+            "generic-store" => Ok(ApiAction::GenericStore),
             _ => Err("not a valid action".to_owned()),
         }
     }
@@ -163,6 +172,26 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
             let request = NodeMessage::DeleteRequest(api::routes::delete::DeleteRequest {
                 message_id: args.message_id,
             });
+            serde_json::to_vec(&request)?
+        }
+        ApiAction::GenericGet => {
+            let request = GenericRequest {
+                input: InputUri::Local(DoraLocalUri(args.message_id)),
+                output: OutputUri::None,
+                execution: Execution::None,
+                signature: false,
+                store: StorageUri::None,
+            };
+            serde_json::to_vec(&request)?
+        }
+        ApiAction::GenericStore => {
+            let request = GenericRequest {
+                input: InputUri::Iota(IotaMessageUri(args.message_id.clone())),
+                output: OutputUri::None,
+                execution: Execution::None,
+                signature: false,
+                store: StorageUri::Dora(DoraLocalUri(args.message_id)),
+            };
             serde_json::to_vec(&request)?
         }
     };

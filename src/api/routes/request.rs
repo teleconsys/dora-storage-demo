@@ -2,24 +2,72 @@ use core::fmt;
 use std::str::FromStr;
 
 use enum_display::EnumDisplay;
+use iota_client::bee_message::prelude::Output;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
-
-use crate::demo::node::Node;
 
 use super::{get::GetRequest, save::StoreRequest, NodeMessage};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-pub struct DoraLocalUri(String);
+pub struct DoraLocalUri(pub String);
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct IotaIndexUri(String);
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct IotaMessageUri(pub String);
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Deserialize, Debug, PartialEq, Eq)]
 pub enum InputUri {
     Iota(IotaMessageUri),
     Local(DoraLocalUri),
+}
+
+impl Serialize for InputUri {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            InputUri::Iota(ref iota) => match iota {
+                IotaMessageUri(index) => {
+                    serializer.serialize_str(&format!("iota:message:{}", index))
+                }
+            },
+            InputUri::Local(ref local) => match local {
+                DoraLocalUri(index) => serializer.serialize_str(&format!("dora:local:{}", index)),
+            },
+        }
+    }
+}
+
+impl Serialize for OutputUri {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            OutputUri::Iota(ref iota) => match iota {
+                IotaIndexUri(index) => serializer.serialize_str(&format!("iota:index:{}", index)),
+            },
+            OutputUri::Dora(ref local) => match local {
+                DoraLocalUri(index) => serializer.serialize_str(&format!("dora:local:{}", index)),
+            },
+            OutputUri::None => serializer.serialize_str(""),
+        }
+    }
+}
+
+impl Serialize for StorageUri {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            StorageUri::Dora(ref local) => match local {
+                DoraLocalUri(index) => serializer.serialize_str(&format!("dora:local:{}", index)),
+            },
+            StorageUri::None => serializer.serialize_str(""),
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -68,6 +116,10 @@ fn deserialize_output_uri<'de, D: Deserializer<'de>>(
         where
             E: serde::de::Error,
         {
+            if v.is_empty() {
+                return Ok(OutputUri::None);
+            }
+
             if let Ok(uri) = IotaIndexUri::from_str(v) {
                 return Ok(OutputUri::Iota(uri));
             }
@@ -95,6 +147,10 @@ fn deserialize_storage_uri<'de, D: Deserializer<'de>>(
         where
             E: serde::de::Error,
         {
+            if v.is_empty() {
+                return Ok(StorageUri::None);
+            }
+
             if let Ok(uri) = DoraLocalUri::from_str(v) {
                 return Ok(StorageUri::Dora(uri));
             }
@@ -173,7 +229,7 @@ impl FromStr for InputUri {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 pub enum OutputUri {
     None,
     Iota(IotaIndexUri),
@@ -186,7 +242,7 @@ impl Default for OutputUri {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Deserialize, Debug, PartialEq, Eq)]
 pub enum StorageUri {
     None,
     Dora(DoraLocalUri),
@@ -261,7 +317,8 @@ fn test_generic_get_request() {
 
 #[test]
 fn test_generic_store_request() {
-    let request_json = r#"{ "input": "iota:message:asdf", "store": "dora:local:asdf" }"#;
+    let request_json =
+        r#"{ "input": "iota:message:asdf", "store": "dora:local:asdf", "output": "" }"#;
     let request: GenericRequest =
         serde_json::from_str(request_json).expect("could not deserialize into generic request");
     assert_eq!(request.execution, Execution::None);
