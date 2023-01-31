@@ -51,7 +51,7 @@ impl Serialize for OutputUri {
             OutputUri::Dora(ref local) => match local {
                 DoraLocalUri(index) => serializer.serialize_str(&format!("dora:local:{}", index)),
             },
-            OutputUri::None => serializer.serialize_str(""),
+            OutputUri::None => serializer.serialize_str("none"),
         }
     }
 }
@@ -65,7 +65,7 @@ impl Serialize for StorageUri {
             StorageUri::Dora(ref local) => match local {
                 DoraLocalUri(index) => serializer.serialize_str(&format!("dora:local:{}", index)),
             },
-            StorageUri::None => serializer.serialize_str(""),
+            StorageUri::None => serializer.serialize_str("none"),
         }
     }
 }
@@ -120,6 +120,10 @@ fn deserialize_output_uri<'de, D: Deserializer<'de>>(
                 return Ok(OutputUri::None);
             }
 
+            if v == "none" {
+                return Ok(OutputUri::None);
+            }
+
             if let Ok(uri) = IotaIndexUri::from_str(v) {
                 return Ok(OutputUri::Iota(uri));
             }
@@ -148,6 +152,10 @@ fn deserialize_storage_uri<'de, D: Deserializer<'de>>(
             E: serde::de::Error,
         {
             if v.is_empty() {
+                return Ok(StorageUri::None);
+            }
+
+            if v == "none" {
                 return Ok(StorageUri::None);
             }
 
@@ -293,8 +301,7 @@ pub struct GenericRequest {
 
 #[test]
 fn test_generic_get_request() {
-    let request_json =
-        r#"{ "input": "dora:local:asdf", "output": "iota:index:asdf", "execution": "None" }"#;
+    let request_json = r#"{ "input": "dora:local:asdf", "output": "iota:index:asdf", "execution": "None", "store": "none" }"#;
     let request: GenericRequest =
         serde_json::from_str(request_json).expect("could not deserialize into generic request");
     assert_eq!(request.execution, Execution::None);
