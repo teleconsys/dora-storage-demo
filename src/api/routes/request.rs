@@ -6,7 +6,11 @@ use iota_client::bee_message::prelude::Output;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
-use super::{get::GetRequest, save::StoreRequest, NodeMessage};
+use super::{
+    get::{GetRequest, GetResponse},
+    save::StoreRequest,
+    NodeMessage,
+};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct DoraLocalUri(pub String);
@@ -273,11 +277,17 @@ impl Default for Execution {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct RequestId(String);
 
-pub struct Signature(String);
+#[derive(Serialize, Deserialize)]
+pub struct Signature(Vec<u8>);
 
-pub enum ResponseState {}
+#[derive(Serialize, Deserialize)]
+pub enum ResponseState {
+    Success,
+    Failure,
+}
 
 fn default_signature_flag() -> bool {
     false
@@ -349,11 +359,54 @@ fn test_generic_store_request() {
     ))
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct GenericResponse {
     request_id: RequestId,
     result: ResponseState,
     signature: Signature,
     output_location: Option<OutputUri>,
+}
+
+#[derive(Error, Debug, EnumDisplay)]
+pub enum GenericResponseParseError {
+    NotAValidResponse,
+}
+
+// TODO: Finish implementing
+impl TryFrom<NodeMessage> for GenericResponse {
+    type Error = GenericResponseParseError;
+
+    fn try_from(value: NodeMessage) -> Result<Self, Self::Error> {
+        match value {
+            NodeMessage::StoreResponse(r) => Ok(Self {
+                request_id: RequestId("".to_owned()),
+                result: ResponseState::Success,
+                signature: Signature(vec![]),
+                output_location: None,
+            }),
+            NodeMessage::GetResponse(r) => match r {
+                GetResponse::Success { data, signature } => Ok(Self {
+                    request_id: RequestId("".to_owned()),
+                    result: ResponseState::Success,
+                    signature: Signature(signature),
+                    output_location: None,
+                }),
+                GetResponse::Failure(f) => Ok(Self {
+                    request_id: RequestId("".to_owned()),
+                    result: ResponseState::Failure,
+                    signature: Signature(vec![]),
+                    output_location: None,
+                }),
+            },
+            NodeMessage::DeleteResponse(r) => Ok(Self {
+                request_id: RequestId("".to_owned()),
+                result: ResponseState::Success,
+                signature: Signature(Default::default()),
+                output_location: None,
+            }),
+            _ => Err(GenericResponseParseError::NotAValidResponse),
+        }
+    }
 }
 
 #[derive(Error, Debug, EnumDisplay)]

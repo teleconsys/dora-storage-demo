@@ -3,6 +3,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use crate::api::routes::delete::{DeleteRequest, DeleteResponse};
 use crate::api::routes::get::{GetError, GetRequest, GetResponse};
+use crate::api::routes::request::GenericResponse;
 use crate::api::routes::save::{StoreError, StoreRequest, StoreResponse};
 use crate::api::routes::{GenericRequest, NodeMessage};
 use crate::did::{new_document, resolve_document};
@@ -337,7 +338,14 @@ impl Node {
                 }
             };
             if let Some(response) = response {
-                let encoded = serde_json::to_vec(&response)?;
+                let r: GenericResponse = match response.try_into() {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log::error!("Could not format response: {}", e);
+                        continue;
+                    }
+                };
+                let encoded = serde_json::to_vec(&r)?;
                 match rt.block_on(api_output.publish(&encoded, Some(api_index.to_owned()))) {
                     Ok(i) => log::info!("Published response on: {}", i),
                     Err(e) => log::error!("Could not publish response: {}", e),
