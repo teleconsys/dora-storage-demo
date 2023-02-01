@@ -1,5 +1,5 @@
 use anyhow::{Error, Result};
-use identity_iota::iota_core::{Network, MessageId};
+use identity_iota::iota_core::{MessageId, Network};
 use std::{
     fmt::Display,
     io::{self, Read, Write},

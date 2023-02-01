@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::Result;
-use identity_iota::iota_core::{Network, MessageId};
+use identity_iota::iota_core::{MessageId, Network};
 use iota_client::{
     bee_message::prelude::{Message, Payload},
     Client, MqttEvent, Topic,

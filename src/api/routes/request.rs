@@ -278,10 +278,10 @@ impl Default for Execution {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct RequestId(String);
+pub struct RequestId(pub String);
 
 #[derive(Serialize, Deserialize)]
-pub struct Signature(Vec<u8>);
+pub struct Signature(pub Vec<u8>);
 
 #[derive(Serialize, Deserialize)]
 pub enum ResponseState {
@@ -361,10 +361,11 @@ fn test_generic_store_request() {
 
 #[derive(Serialize, Deserialize)]
 pub struct GenericResponse {
-    request_id: RequestId,
-    result: ResponseState,
-    signature: Signature,
-    output_location: Option<OutputUri>,
+    pub(crate) request_id: RequestId,
+    pub(crate) result: ResponseState,
+    pub(crate) output_location: Option<OutputUri>,
+    pub(crate) data: Option<String>,
+    pub(crate) signature: Signature,
 }
 
 #[derive(Error, Debug, EnumDisplay)]
@@ -383,6 +384,7 @@ impl TryFrom<NodeMessage> for GenericResponse {
                 result: ResponseState::Success,
                 signature: Signature(vec![]),
                 output_location: None,
+                data: None,
             }),
             NodeMessage::GetResponse(r) => match r {
                 GetResponse::Success { data, signature } => Ok(Self {
@@ -390,12 +392,14 @@ impl TryFrom<NodeMessage> for GenericResponse {
                     result: ResponseState::Success,
                     signature: Signature(signature),
                     output_location: None,
+                    data: None,
                 }),
                 GetResponse::Failure(f) => Ok(Self {
                     request_id: RequestId("".to_owned()),
                     result: ResponseState::Failure,
                     signature: Signature(vec![]),
                     output_location: None,
+                    data: None,
                 }),
             },
             NodeMessage::DeleteResponse(r) => Ok(Self {
@@ -403,6 +407,7 @@ impl TryFrom<NodeMessage> for GenericResponse {
                 result: ResponseState::Success,
                 signature: Signature(Default::default()),
                 output_location: None,
+                data: None,
             }),
             _ => Err(GenericResponseParseError::NotAValidResponse),
         }
