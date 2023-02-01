@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::Result;
-use identity_iota::iota_core::Network;
+use identity_iota::iota_core::{Network, MessageId};
 use iota_client::{
     bee_message::prelude::{Message, Payload},
     Client, MqttEvent, Topic,
@@ -26,7 +26,7 @@ impl Listener {
         new_listener(network.name_str())
     }
 
-    pub async fn start(&mut self, index: String) -> Result<Receiver<(Vec<u8>, Vec<u8>)>> {
+    pub async fn start(&mut self, index: String) -> Result<Receiver<(Vec<u8>, MessageId)>> {
         self.listen_index(index).await
     }
 
@@ -35,7 +35,7 @@ impl Listener {
         Ok(())
     }
 
-    async fn listen_index(&mut self, index: String) -> Result<Receiver<(Vec<u8>, Vec<u8>)>> {
+    async fn listen_index(&mut self, index: String) -> Result<Receiver<(Vec<u8>, MessageId)>> {
         let (tx, rx) = channel();
         let tx = Arc::new(Mutex::new(tx));
 
@@ -60,7 +60,7 @@ impl Listener {
                     // println!("{}", str::from_utf8(payload.data()).unwrap());
                     tx.lock()
                         .unwrap()
-                        .send((Vec::from(payload.data()), message.id().1))
+                        .send((Vec::from(payload.data()), message.id().0))
                         .unwrap();
                 }
             })

@@ -1,5 +1,5 @@
 use anyhow::{Error, Result};
-use identity_iota::iota_core::Network;
+use identity_iota::iota_core::{Network, MessageId};
 use std::{
     fmt::Display,
     io::{self, Read, Write},
@@ -112,7 +112,7 @@ impl<T: DeserializeOwned + Display, S: Sender<T> + 'static> IotaListenRelay<T, S
 
     pub fn listen(&self) -> Result<()> {
         let mut listener = Listener::new(self.network.clone())?;
-        let receivers: Vec<std::sync::mpsc::Receiver<(Vec<u8>, Vec<u8>)>> = self
+        let receivers: Vec<std::sync::mpsc::Receiver<(Vec<u8>, MessageId)>> = self
             .indexes
             .iter()
             .map(|i| tokio::runtime::Runtime::new()?.block_on(listener.start(i.to_string())))

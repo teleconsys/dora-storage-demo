@@ -234,26 +234,10 @@ impl Node {
         if let SignTerminalStates::Completed(signature, processed_partial_owners, bad_signers) =
             sign_terminal_state
         {
-            // find out who didn't send a partial signature
-            let mut working_nodes = vec![];
-            for owner in processed_partial_owners {
-                working_nodes.push(public_to_did(&did_urls, owner)?);
-            }
-            let mut absent_nodes = did_urls.clone();
-            for worker in working_nodes.clone() {
-                absent_nodes.retain(|x| *x != worker);
-            }
-
-            // find out who was a bad signer
-            let mut bad_signers_nodes = vec![];
-            for owner in bad_signers {
-                bad_signers_nodes.push(public_to_did(&did_urls, owner)?);
-            }
 
             // Publish DKG signature log
-            log::info!("Signature success. Nodes that didn't participate: {:?}. Nodes that didn't provide a correct signature: {:?}", absent_nodes, bad_signers_nodes);
-            let mut dkg_log =
-                new_signature_log("First DKG".to_string(), absent_nodes, bad_signers_nodes);
+            let (mut dkg_log, mut working_nodes) =
+                new_signature_log("First DKG".to_string(), processed_partial_owners, bad_signers, did_urls.clone())?;
             iota_logger.publish(&mut dkg_log)?;
 
             // Publish signed DID if the node is the first on the list
@@ -271,6 +255,8 @@ impl Node {
                 did_network,
                 signature_sender,
                 signature_sleep_time,
+                iota_logger,
+                did_urls
             )?;
             Ok((signature, dist_pub_key))
         } else {
@@ -282,6 +268,8 @@ impl Node {
                 did_network,
                 signature_sender,
                 signature_sleep_time,
+                iota_logger,
+                did_urls,
             )?;
             Ok((Signature::from(vec![]), dist_pub_key))
         }
@@ -295,6 +283,8 @@ impl Node {
         network_name: String,
         signature_sender: Sender<MessageWrapper<SignMessage>>,
         signature_sleep_time: u64,
+        logger: NodeSignatureLogger,
+        did_urls: Vec<String>
     ) -> Result<(), anyhow::Error> {
         let network = match network_name.as_str() {
             "iota-main" => Network::Mainnet,
@@ -336,7 +326,9 @@ impl Node {
                     request,
                     &self.sign_input_channel,
                     &self.sign_output_channel,
-                    &req_id,
+                    &req_id.to_string(),
+                    logger.clone(),
+                    did_urls.clone()
                 )
                 .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))
             {
@@ -391,17 +383,21 @@ impl ApiNode {
         message: NodeMessage,
         nodes_input: &Receiver<MessageWrapper<SignMessage>>,
         nodes_output: &Sender<MessageWrapper<SignMessage>>,
-        session_id: &[u8],
+        session_id: &str,
+        signature_logger: NodeSignatureLogger,
+        did_urls: Vec<String>
     ) -> Result<Option<NodeMessage>, ApiNodeError> {
         match message {
-            NodeMessage::StoreRequest(r) => Ok(Some(self.handle_store_request(r)?)),
+            NodeMessage::StoreRequest(r) => Ok(Some(self.handle_store_request(r, signature_logger, did_urls)?)),
             NodeMessage::GetRequest(r) => Ok(Some(self.handle_get_request(
                 r,
                 nodes_input,
                 nodes_output,
                 session_id,
+                signature_logger,
+                did_urls
             )?)),
-            NodeMessage::DeleteRequest(r) => Ok(Some(self.handle_delete_request(r)?)),
+            NodeMessage::DeleteRequest(r) => Ok(Some(self.handle_delete_request(r, signature_logger, did_urls)?)),
             m => {
                 log::warn!("Skipping unsupported request: {:?}", m);
                 Ok(None)
@@ -409,7 +405,7 @@ impl ApiNode {
         }
     }
 
-    fn handle_store_request(&self, request: StoreRequest) -> Result<NodeMessage, ApiNodeError> {
+    fn handle_store_request(&self, request: StoreRequest, logger: NodeSignatureLogger, did_urls: Vec<String>) -> Result<NodeMessage, ApiNodeError> {
         let rt = tokio::runtime::Runtime::new()?;
 
         let message_id = MessageId::from_str(&request.message_id)
@@ -441,7 +437,9 @@ impl ApiNode {
         request: GetRequest,
         sign_input: &Receiver<MessageWrapper<SignMessage>>,
         sign_output: &Sender<MessageWrapper<SignMessage>>,
-        session_id: &[u8],
+        session_id: &str,
+        logger: NodeSignatureLogger,
+        did_urls: Vec<String>
     ) -> Result<NodeMessage, ApiNodeError> {
         let data = match self.storage.get(request.message_id) {
             Ok(d) => d,
@@ -452,9 +450,8 @@ impl ApiNode {
             }
         };
 
-        let session_id_str = std::str::from_utf8(session_id).unwrap();
         let mut sign_fsm =
-            self.get_sign_fsm(&data, session_id_str.to_string(), sign_input, sign_output)?;
+            self.get_sign_fsm(&data, session_id.to_string(), sign_input, sign_output)?;
         let final_state = match sign_fsm.run() {
             Ok(state) => state,
             Err(e) => return Err(ApiNodeError::SignatureError(e)),
@@ -466,7 +463,9 @@ impl ApiNode {
         };
 
         match final_state {
-            SignTerminalStates::Completed(signature, ..) => {
+            SignTerminalStates::Completed(signature, processed_partial_owners, bad_signers) => {
+                let (mut log, _) = new_signature_log(session_id.to_string(), processed_partial_owners, bad_signers, did_urls).map_err(ApiNodeError::LogError)?;
+                logger.publish(&mut log).map_err(ApiNodeError::LogError)?;
                 let response = GetResponse::Success {
                     data: data_utf8,
                     signature: signature.to_vec(),
@@ -483,8 +482,8 @@ impl ApiNode {
         }
     }
 
-    fn handle_delete_request(&self, reqeust: DeleteRequest) -> Result<NodeMessage, ApiNodeError> {
-        match self.storage.delete(reqeust.message_id) {
+    fn handle_delete_request(&self, request: DeleteRequest, logger: NodeSignatureLogger, did_urls: Vec<String>) -> Result<NodeMessage, ApiNodeError> {
+        match self.storage.delete(request.message_id) {
             Ok(()) => (),
             Err(e) => return Err(ApiNodeError::StorageError(e)),
         };
@@ -505,6 +504,7 @@ impl ApiNode {
             .with_secret(self.secret.clone())
             .with_sender(self.signature_sender.clone())
             .with_sleep_time(self.signature_sleep_time)
+            .with_id(session_id.clone())
             .build()
             .map_err(ApiNodeError::SignatureError)?;
 
@@ -532,6 +532,7 @@ pub enum ApiNodeError {
     StorageError(anyhow::Error),
     SignatureError(anyhow::Error),
     ConversionError(Utf8Error),
+    LogError(anyhow::Error)
 }
 
 impl std::error::Error for ApiNodeError {}
@@ -605,16 +606,34 @@ pub struct NodeSignatureLog {
 
 pub fn new_signature_log(
     session_id: String,
-    absent_nodes: Vec<String>,
-    bad_signers: Vec<String>,
-) -> NodeSignatureLog {
-    NodeSignatureLog {
+    processed_partial_owners: Vec<Point>,
+    bad_signers: Vec<Point>,
+    did_urls: Vec<String>
+) -> anyhow::Result<(NodeSignatureLog, Vec<String>)> {
+    // find out who didn't send a partial signature
+    let mut working_nodes = vec![];
+    for owner in processed_partial_owners {
+        working_nodes.push(public_to_did(&did_urls, owner)?);
+    }
+    let mut absent_nodes = did_urls.clone();
+    for worker in working_nodes.clone() {
+        absent_nodes.retain(|x| *x != worker);
+    }
+
+    // find out who was a bad signer
+    let mut bad_signers_nodes = vec![];
+    for owner in bad_signers {
+        bad_signers_nodes.push(public_to_did(&did_urls, owner)?);
+    }
+
+    log::info!("Signature success. Nodes that didn't participate: {:?}. Nodes that didn't provide a correct signature: {:?}", absent_nodes, bad_signers_nodes);
+    Ok((NodeSignatureLog {
         session_id,
         sender: "".to_string(),
         absent_nodes,
-        bad_signers,
+        bad_signers: bad_signers_nodes,
         signature: vec![],
-    }
+    }, working_nodes))
 }
 
 impl NodeSignatureLog {
@@ -635,3 +654,5 @@ impl NodeSignatureLog {
         }
     }
 }
+
+
