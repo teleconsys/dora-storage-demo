@@ -112,7 +112,7 @@ impl<T: DeserializeOwned + Display, S: Sender<T> + 'static> IotaListenRelay<T, S
 
     pub fn listen(&self) -> Result<()> {
         let mut listener = Listener::new(self.network.clone())?;
-        let receivers: Vec<std::sync::mpsc::Receiver<Vec<u8>>> = self
+        let receivers: Vec<std::sync::mpsc::Receiver<(Vec<u8>, Vec<u8>)>> = self
             .indexes
             .iter()
             .map(|i| tokio::runtime::Runtime::new()?.block_on(listener.start(i.to_string())))
@@ -121,8 +121,10 @@ impl<T: DeserializeOwned + Display, S: Sender<T> + 'static> IotaListenRelay<T, S
         let mut handles = Vec::new();
         for receiver in receivers {
             let output = self.output.clone();
+
+            // TODO MANAGE THE ID 
             let h = thread::spawn(move || {
-                for data in receiver {
+                for (data, id) in receiver {
                     if let Ok(message) = serde_json::from_slice(&data) {
                         log::trace!("Message received");
                         let res = output.send(message);

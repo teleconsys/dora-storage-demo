@@ -201,7 +201,7 @@ fn listen_governor_instructions(
     let receiver = tokio::runtime::Runtime::new()?.block_on(init_listener.start(governor_index))?;
     loop {
         if let Some(data) = receiver.iter().next() {
-            let mut deserializer = serde_json::Deserializer::from_slice(&data);
+            let mut deserializer = serde_json::Deserializer::from_slice(&data.0);
             if let Ok(message) = DkgInit::deserialize(&mut deserializer) {
                 for node in message.nodes.iter() {
                     if own_did == *node {

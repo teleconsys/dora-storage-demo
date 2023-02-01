@@ -16,19 +16,19 @@ pub struct Feed<T: Display + Serialize, R: Receiver<MessageWrapper<T>>> {
     /// Channel to receive message to deliver..
     receiver: R,
 
-    filter_key: Point,
+    filter_id: String,
 
     /// Any message drawn from [Feed] can be delayed and later placed in the [queue].
     delayed: Vec<T>,
 }
 
 impl<T: Display + Serialize, R: Receiver<MessageWrapper<T>>> Feed<T, R> {
-    pub(crate) fn new(feed: R, key: Point) -> Self {
+    pub(crate) fn new(feed: R, filter_id: String) -> Self {
         Self {
             queue: VecDeque::new(),
             receiver: feed,
             delayed: Vec::new(),
-            filter_key: key,
+            filter_id,
         }
     }
 
@@ -44,7 +44,7 @@ impl<T: Display + Serialize, R: Receiver<MessageWrapper<T>>> Feed<T, R> {
         let wrapped_message = self.receiver.recv().map_err(|e| match e {
             RecvError => FeedError::ChannelClosed,
         })?;
-        if wrapped_message.sender == self.filter_key {
+        if wrapped_message.session_id != self.filter_id {
             return Err(FeedError::NoNewMessages);
         }
         Ok(wrapped_message.message)
@@ -65,15 +65,15 @@ impl<T: Display + Serialize, R: Receiver<MessageWrapper<T>>> Feed<T, R> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MessageWrapper<T: Display + Serialize> {
-    pub sender: Point,
+    pub session_id: String,
     pub message: T,
 }
 
 impl<T: Display + Serialize> Display for MessageWrapper<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
-            "Broadcasting from {}: {}",
-            &self.sender.to_string()[..6],
+            "Broadcasting session_id {}: {}",
+            &self.session_id.to_string()[..6],
             self.message
         ))
     }

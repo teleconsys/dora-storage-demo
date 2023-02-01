@@ -88,12 +88,14 @@ impl Node {
         signature_sender: Sender<MessageWrapper<SignMessage>>,
         signature_sleep_time: u64,
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
+        let dkg_id = "First DKG";
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
         let dkg_initial_state = Initializing::new(self.keypair.clone(), did_url, num_participants);
-        let dkg_feed = Feed::new(&self.dkg_input_channel, public.clone());
+        let dkg_feed = Feed::new(&self.dkg_input_channel, dkg_id.to_string());
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
+            dkg_id.to_string(),
             dkg_feed,
             &self.dkg_output_channel,
             self.id,
@@ -125,9 +127,10 @@ impl Node {
             .with_sleep_time(signature_sleep_time)
             .build()?;
 
-        let sign_feed = Feed::new(&self.sign_input_channel, public.clone());
+        let sign_feed = Feed::new(&self.sign_input_channel, dkg_id.to_string());
         let mut sign_fsm = StateMachine::new(
             Box::new(sign_initial_state),
+            dkg_id.to_owned(),
             sign_feed,
             &self.sign_output_channel,
             self.id,
@@ -172,6 +175,7 @@ impl Node {
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
+        let dkg_id = "First DKG";
         let dkg_initial_state = InitializingIota::new(
             self.keypair.clone(),
             own_did_url.clone(),
@@ -180,7 +184,8 @@ impl Node {
         )?;
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
-            Feed::new(&self.dkg_input_channel, public.clone()),
+            dkg_id.to_owned(),
+            Feed::new(&self.dkg_input_channel, dkg_id.to_string()),
             &self.dkg_output_channel,
             self.id,
             public.clone(),
@@ -202,11 +207,13 @@ impl Node {
             .with_secret(secret)
             .with_sender(signature_sender.clone())
             .with_sleep_time(signature_sleep_time)
+            .with_id(dkg_id.to_string())
             .build()?;
 
         let mut sign_fsm = StateMachine::new(
             Box::new(sign_initial_state),
-            Feed::new(&self.sign_input_channel, public.clone()),
+            dkg_id.to_owned(),
+            Feed::new(&self.sign_input_channel, dkg_id.to_string()),
             &self.sign_output_channel,
             self.id,
             public,
@@ -245,11 +252,8 @@ impl Node {
 
             // Publish DKG signature log
             log::info!("Signature success. Nodes that didn't participate: {:?}. Nodes that didn't provide a correct signature: {:?}", absent_nodes, bad_signers_nodes);
-            let mut dkg_log = new_signature_log(
-                "Initialization DKG".to_string(),
-                absent_nodes,
-                bad_signers_nodes,
-            );
+            let mut dkg_log =
+                new_signature_log("First DKG".to_string(), absent_nodes, bad_signers_nodes);
             iota_logger.publish(&mut dkg_log)?;
 
             // Publish signed DID if the node is the first on the list
@@ -312,7 +316,7 @@ impl Node {
         };
         let rt = tokio::runtime::Runtime::new()?;
         log::info!("Listening for committee requests on index: {}", api_index);
-        for message_data in rt.block_on(api_input.start(api_index.to_owned()))? {
+        for (message_data, req_id) in rt.block_on(api_input.start(api_index.to_owned()))? {
             let message: GenericRequest = match serde_json::from_slice(&message_data) {
                 Ok(m) => m,
                 Err(_) => {
@@ -328,7 +332,7 @@ impl Node {
             };
             log::info!("Received committee request: {:?}", request);
             let response = match api_node
-                .handle_message(request, &self.sign_input_channel, &self.sign_output_channel)
+                .handle_message(request, &self.sign_input_channel, &self.sign_output_channel, &req_id)
                 .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))
             {
                 Ok(r) => r,
@@ -382,6 +386,7 @@ impl ApiNode {
         message: NodeMessage,
         nodes_input: &Receiver<MessageWrapper<SignMessage>>,
         nodes_output: &Sender<MessageWrapper<SignMessage>>,
+        session_id: &[u8]
     ) -> Result<Option<NodeMessage>, ApiNodeError> {
         match message {
             NodeMessage::StoreRequest(r) => Ok(Some(self.handle_store_request(r)?)),
@@ -389,6 +394,7 @@ impl ApiNode {
                 r,
                 nodes_input,
                 nodes_output,
+                session_id,
             )?)),
             NodeMessage::DeleteRequest(r) => Ok(Some(self.handle_delete_request(r)?)),
             m => {
@@ -430,6 +436,7 @@ impl ApiNode {
         request: GetRequest,
         sign_input: &Receiver<MessageWrapper<SignMessage>>,
         sign_output: &Sender<MessageWrapper<SignMessage>>,
+        session_id: &[u8],
     ) -> Result<NodeMessage, ApiNodeError> {
         let data = match self.storage.get(request.message_id) {
             Ok(d) => d,
@@ -440,7 +447,8 @@ impl ApiNode {
             }
         };
 
-        let mut sign_fsm = self.get_sign_fsm(&data, sign_input, sign_output)?;
+        let session_id_str = std::str::from_utf8(session_id).unwrap();
+        let mut sign_fsm = self.get_sign_fsm(&data, session_id_str.to_string(), sign_input, sign_output)?;
         let final_state = match sign_fsm.run() {
             Ok(state) => state,
             Err(e) => return Err(ApiNodeError::SignatureError(e)),
@@ -481,6 +489,7 @@ impl ApiNode {
     fn get_sign_fsm<'a>(
         &self,
         message: &[u8],
+        session_id: String,
         sign_input: &'a Receiver<MessageWrapper<SignMessage>>,
         sign_output: &'a Sender<MessageWrapper<SignMessage>>,
     ) -> Result<FSM<'a>, ApiNodeError> {
@@ -495,7 +504,8 @@ impl ApiNode {
 
         let fsm = StateMachine::new(
             Box::new(sign_initial_state),
-            Feed::new(sign_input, self.public_key.clone()),
+            session_id.clone(),
+            Feed::new(sign_input, session_id),
             sign_output,
             self.id,
             self.public_key.clone(),
