@@ -24,6 +24,7 @@ enum WaitingState {
 
 pub struct Initializing {
     dss: DSS<SuiteEd25519, DistKeyShare<SuiteEd25519>>,
+    session_id: String,
     partial_signature: PartialSig<SuiteEd25519>,
     processed_partial_owners: Vec<Point>,
     bad_signers: Vec<Point>,
@@ -36,6 +37,7 @@ impl Initializing {
     pub fn new(
         suite: SuiteEd25519,
         secret: &Scalar,
+        session_id: String,
         participants: &[Point],
         dks: &DistKeyShare<SuiteEd25519>,
         msg: &[u8],
@@ -57,6 +59,7 @@ impl Initializing {
         let partial_signature = dss.partial_sig()?;
         Ok(Initializing {
             dss,
+            session_id,
             partial_signature,
             processed_partial_owners: vec![],
             bad_signers: vec![],
@@ -69,6 +72,7 @@ impl Initializing {
 
 pub struct InitializingBuilder {
     suite: SuiteEd25519,
+    session_id: Option<String>,
     secret: Option<Scalar>,
     participants: Vec<Point>,
     dks: DistKeyShare<SuiteEd25519>,
@@ -84,6 +88,7 @@ enum MissingField {
     Message,
     Sender,
     SleepTime,
+    SessionId,
 }
 
 impl Display for MissingField {
@@ -93,6 +98,7 @@ impl Display for MissingField {
             MissingField::Message => f.write_str("Missing field: Message"),
             MissingField::Sender => f.write_str("Missing field: Sender"),
             MissingField::SleepTime => f.write_str("Missing field: SleepTime"),
+            MissingField::SessionId => f.write_str("Missing field: SessionId"),
         }
     }
 }
@@ -116,10 +122,18 @@ impl InitializingBuilder {
             partial_signature,
             processed_partial_owners: vec![partecipants[own_index].clone()],
             bad_signers: vec![],
+            session_id: self.session_id.ok_or(MissingField::SessionId)?,
             waiting: WaitingState::NeverWaited,
             sender: self.sender.ok_or(MissingField::Sender)?,
             sleep_time: self.sleep_time.ok_or(MissingField::SleepTime)?,
         })
+    }
+
+    pub fn with_id(self, id: String) -> Self {
+        Self {
+            session_id: Some(id),
+            ..self
+        }
     }
 
     pub fn with_secret(self, secret: Scalar) -> Self {
@@ -160,6 +174,7 @@ impl TryFrom<DistKeyGenerator<SuiteEd25519>> for InitializingBuilder {
         let dks = dkg.dist_key_share()?;
         Ok(Self {
             suite: dkg.suite,
+            session_id: None,
             secret: None,
             participants: sorted_participants,
             dks,
@@ -223,7 +238,7 @@ impl State<SignTypes> for Initializing {
 
                 // trigger advance messages in the case that no partial signature is received in the meantime
                 self.sender.send(MessageWrapper {
-                    sender: Point::default(),
+                    session_id: self.session_id.clone(),
                     message: SignMessage::WaitingDone,
                 })?;
 

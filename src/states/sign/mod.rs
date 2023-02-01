@@ -18,7 +18,7 @@ impl StateMachineTypes for SignTypes {
     type TerminalStates = SignTerminalStates;
 }
 
-pub struct Signature(Vec<u8>);
+pub struct Signature(pub Vec<u8>);
 
 impl Signature {
     pub fn to_vec(&self) -> Vec<u8> {

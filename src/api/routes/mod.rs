@@ -8,10 +8,12 @@ use tokio::sync::broadcast::{Receiver, Sender};
 
 use self::delete::{DeleteRequest, DeleteResponse};
 use self::get::{GetRequest, GetResponse};
+pub use self::request::GenericRequest;
 use self::save::{StoreRequest, StoreResponse};
 
 pub mod delete;
 pub mod get;
+pub mod request;
 pub mod save;
 
 pub struct AppData {

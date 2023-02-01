@@ -37,6 +37,7 @@ pub trait StateMachineTypes {
 
 pub struct StateMachine<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> {
     id: usize,
+    session_id: String,
     key: Point,
     state: BoxedState<T>,
     message_output: &'a Sender<MessageWrapper<T::Message>>,
@@ -49,6 +50,7 @@ impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMac
     }
     pub fn new<F: Into<Feed<T::Message, R>>>(
         initial_state: BoxedState<T>,
+        session_id: String,
         input_channel: F,
         output_channel: &'a Sender<MessageWrapper<T::Message>>,
         id: usize,
@@ -56,6 +58,7 @@ impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMac
     ) -> StateMachine<'a, T, R> {
         Self {
             id,
+            session_id,
             key,
             state: initial_state,
             message_output: output_channel,
@@ -68,7 +71,7 @@ impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMac
             let messages: Vec<T::Message> = self.state.initialize();
             for message in messages {
                 self.message_output.send(MessageWrapper {
-                    sender: self.key.clone(),
+                    session_id: self.session_id.clone(),
                     message,
                 })?;
             }
