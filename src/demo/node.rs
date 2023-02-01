@@ -332,7 +332,12 @@ impl Node {
             };
             log::info!("Received committee request: {:?}", request);
             let response = match api_node
-                .handle_message(request, &self.sign_input_channel, &self.sign_output_channel, &req_id)
+                .handle_message(
+                    request,
+                    &self.sign_input_channel,
+                    &self.sign_output_channel,
+                    &req_id,
+                )
                 .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))
             {
                 Ok(r) => r,
@@ -386,7 +391,7 @@ impl ApiNode {
         message: NodeMessage,
         nodes_input: &Receiver<MessageWrapper<SignMessage>>,
         nodes_output: &Sender<MessageWrapper<SignMessage>>,
-        session_id: &[u8]
+        session_id: &[u8],
     ) -> Result<Option<NodeMessage>, ApiNodeError> {
         match message {
             NodeMessage::StoreRequest(r) => Ok(Some(self.handle_store_request(r)?)),
@@ -448,7 +453,8 @@ impl ApiNode {
         };
 
         let session_id_str = std::str::from_utf8(session_id).unwrap();
-        let mut sign_fsm = self.get_sign_fsm(&data, session_id_str.to_string(), sign_input, sign_output)?;
+        let mut sign_fsm =
+            self.get_sign_fsm(&data, session_id_str.to_string(), sign_input, sign_output)?;
         let final_state = match sign_fsm.run() {
             Ok(state) => state,
             Err(e) => return Err(ApiNodeError::SignatureError(e)),

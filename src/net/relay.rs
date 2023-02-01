@@ -122,7 +122,7 @@ impl<T: DeserializeOwned + Display, S: Sender<T> + 'static> IotaListenRelay<T, S
         for receiver in receivers {
             let output = self.output.clone();
 
-            // TODO MANAGE THE ID 
+            // TODO MANAGE THE ID
             let h = thread::spawn(move || {
                 for (data, id) in receiver {
                     if let Ok(message) = serde_json::from_slice(&data) {

@@ -58,7 +58,10 @@ impl Listener {
                 let message: Message = serde_json::from_str(&event.payload).unwrap();
                 if let Payload::Indexation(payload) = message.payload().as_ref().unwrap() {
                     // println!("{}", str::from_utf8(payload.data()).unwrap());
-                    tx.lock().unwrap().send((Vec::from(payload.data()), message.id().1)).unwrap();
+                    tx.lock()
+                        .unwrap()
+                        .send((Vec::from(payload.data()), message.id().1))
+                        .unwrap();
                 }
             })
             .await?;
