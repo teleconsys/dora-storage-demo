@@ -9,6 +9,7 @@ use crate::api::routes::request::{
 };
 use crate::api::routes::save::{StoreError, StoreRequest, StoreResponse};
 use crate::api::routes::{GenericRequest, NodeMessage};
+use crate::demo::node;
 use crate::did::{new_document, resolve_document};
 use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates, Initializing};
 use crate::dlt::iota::{Listener, Publisher};
@@ -150,7 +151,7 @@ impl Node {
                 // Publish signed DID
                 let did_url = document.did_url();
                 document.publish(&signature.to_vec())?;
-                log::info!("Committee's DID has been published, DID URL: {}", did_url);
+                log::info!("committee's DID has been published, DID URL: {}", did_url);
 
                 let resolved_did = resolve_document(did_url.clone())?;
 
@@ -161,7 +162,7 @@ impl Node {
             Ok((signature, dist_pub_key))
         } else {
             let did_url = document.did_url();
-            log::info!("Could not sign committee's DID, DID URL: {}", did_url);
+            log::error!("could not sign committee's DID, DID URL: {}", did_url);
             Ok((Signature::from(vec![]), dist_pub_key))
         }
     }
@@ -251,7 +252,7 @@ impl Node {
             working_nodes.sort();
             if own_did_url == working_nodes[0] {
                 document.publish(&signature.to_vec())?;
-                log::info!("Committee's DID has been published, DID URL: {}", did_url);
+                log::info!("committee's DID has been published, DID URL: {}", did_url);
                 //let resolved_did = resolve_document(did_url.clone())?;
             }
 
@@ -268,7 +269,7 @@ impl Node {
             )?;
             Ok((signature, dist_pub_key))
         } else {
-            log::info!("Could not sign committee's DID, DID URL: {}", did_url);
+            log::error!("could not sign committee's DID, DID URL: {}", did_url);
             self.run_api_node(
                 did_url,
                 own_did_url,
@@ -315,7 +316,7 @@ impl Node {
             signature_sleep_time,
         };
         let rt = tokio::runtime::Runtime::new()?;
-        log::info!("Listening for committee requests on index: {}", api_index);
+        log::info!("listening for committee requests on index: {}", api_index);
         for (message_data, req_id) in rt.block_on(api_input.start(api_index.to_owned()))? {
             let message: GenericRequest = match serde_json::from_slice(&message_data) {
                 Ok(m) => m,
@@ -330,7 +331,7 @@ impl Node {
                     continue;
                 }
             };
-            log::info!("Received committee request: {:?}", request);
+            log::info!("received committee request, id: {}", req_id);
             let response = match api_node
                 .handle_message(
                     request,
@@ -344,7 +345,7 @@ impl Node {
             {
                 Ok(r) => r,
                 Err(e) => {
-                    log::error!("Could not handle request: {}", e);
+                    log::error!("could not handle request: {}", e);
                     continue;
                 }
             };
@@ -355,8 +356,8 @@ impl Node {
                 wn.sort();
                 if own_did_url == wn[0] {
                     match rt.block_on(api_output.publish(&encoded, Some(api_index.to_owned()))) {
-                        Ok(i) => log::info!("Published response on: {}", i),
-                        Err(e) => log::error!("Could not publish response: {}", e),
+                        Ok(i) => log::info!("published response on: {}", i),
+                        Err(e) => log::error!("could not publish response: {}", e),
                     };
                 }
             }
@@ -418,7 +419,7 @@ impl ApiNode {
                 did_urls,
             )?)),
             m => {
-                log::warn!("Skipping unsupported request: {:?}", m);
+                log::warn!("skipping unsupported request: {:?}", m);
                 Ok(None)
             }
         }
@@ -715,7 +716,7 @@ impl NodeSignatureLogger {
 
         let msg_id = tokio::runtime::Runtime::new()?
             .block_on(publisher.publish(&log.to_jcs()?, Some(self.committee_index.clone())))?;
-        log::info!("Log published (msg_id: {})", msg_id);
+        log::info!("[{}] log published (msg_id: {})", log.session_id, msg_id);
         Ok(())
     }
 
@@ -742,14 +743,16 @@ pub fn new_signature_log(
     bad_signers: Vec<Point>,
     did_urls: Vec<String>,
 ) -> anyhow::Result<(NodeSignatureLog, Vec<String>)> {
+
     // find out who didn't send a partial signature
-    let mut working_nodes = vec![];
+    let mut processed_partial_owners_dids = vec![];
     for owner in processed_partial_owners {
-        working_nodes.push(public_to_did(&did_urls, owner)?);
+        processed_partial_owners_dids.push(public_to_did(&did_urls, owner)?);
     }
+
     let mut absent_nodes = did_urls.clone();
-    for worker in working_nodes.clone() {
-        absent_nodes.retain(|x| *x != worker);
+    for node in processed_partial_owners_dids.clone() {
+        absent_nodes.retain(|x| *x != node);
     }
 
     // find out who was a bad signer
@@ -758,7 +761,14 @@ pub fn new_signature_log(
         bad_signers_nodes.push(public_to_did(&did_urls, owner)?);
     }
 
-    log::info!("Signature success. Nodes that didn't participate: {:?}. Nodes that didn't provide a correct signature: {:?}", absent_nodes, bad_signers_nodes);
+    let mut working_nodes = vec![];
+    for did in processed_partial_owners_dids {
+        if !bad_signers_nodes.contains(&did) {
+            working_nodes.push(did);
+        }
+    }
+
+    log::info!("[{}] signature success \n\t nodes that didn't participate: {:?} \n\t nodes that didn't provide a correct signature: {:?}", session_id, absent_nodes, bad_signers_nodes);
     Ok((
         NodeSignatureLog {
             session_id,
@@ -810,7 +820,7 @@ fn manage_signature_terminal_state(
             Ok((signature, working_nodes))
         }
         SignTerminalStates::Failed => {
-            log::error!("Sign failed");
+            log::error!("[{}] signature failed", session_id);
             Err(anyhow::Error::msg("Sign Failed"))
         }
     }

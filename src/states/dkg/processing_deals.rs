@@ -60,7 +60,7 @@ impl State<DkgTypes> for ProcessingDeals {
                 }
             }
             DkgMessage::Deal { .. } => {
-                log::trace!("Skipping deal meant for other node");
+                log::trace!("skipping deal meant for other node");
                 DeliveryStatus::Delivered
             }
             m => DeliveryStatus::Unexpected(m),

@@ -47,7 +47,7 @@ impl State<DkgTypes> for ProcessingSecretCommits {
     fn deliver(&mut self, message: DkgMessage) -> DeliveryStatus<DkgMessage> {
         match message {
             DkgMessage::SecretCommits { source, .. } if source == self.dkg.pubb => {
-                log::trace!("Skipping own message");
+                log::trace!("skipping own message");
                 DeliveryStatus::Delivered
             }
             DkgMessage::SecretCommits {

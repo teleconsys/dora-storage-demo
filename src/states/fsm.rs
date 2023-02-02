@@ -77,16 +77,17 @@ impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMac
             }
 
             self.message_input.refresh();
-            log::info!(
+            log::trace!(
                 target: &self.log_target(),
-                "Initializing state {}",
+                "[{}] initializing state {}",
+                self.session_id,
                 self.state.to_string().cyan()
             );
             loop {
                 let transition: Transition<T> = self
                     .state
                     .advance()
-                    .map_err(|e| Error::msg(format!("[{}] Failed transition: {}", self.id, e)))?;
+                    .map_err(|e| Error::msg(format!("[{}] failed transition: {}", self.session_id, e)))?;
                 match transition {
                     Transition::Same => {
                         match self.message_input.next() {
@@ -95,14 +96,14 @@ impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMac
                                 DeliveryStatus::Unexpected(m) => {
                                     log::warn!(
                                         target: &self.log_target(),
-                                        "Delaying unexpected message: {}", m
+                                        "[{}] delaying unexpected message: {}", self.session_id, m
                                     );
                                     self.message_input.delay(m);
                                 }
                                 DeliveryStatus::Error(e) => {
                                     return Err(Error::msg(format!(
                                         "[{}][{}] {}",
-                                        self.id, self.state, e
+                                        self.session_id, self.state, e
                                     )));
                                 }
                             },
@@ -116,15 +117,15 @@ impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMac
                     Transition::Next(next_state) => {
                         log::trace!(
                             target: &self.log_target(),
-                            "Transitioning state: {} => {}", self.state.to_string(), next_state.to_string()
+                            "[{}] transitioning state: {} => {}", self.session_id, self.state.to_string(), next_state.to_string()
                         );
                         self.state = next_state;
                         break;
                     }
                     Transition::Terminal(final_state) => {
-                        log::info!(
+                        log::trace!(
                             target: &self.log_target(),
-                            "Completed"
+                            "[{}] completed", self.session_id
                         );
                         return Ok(final_state);
                     }

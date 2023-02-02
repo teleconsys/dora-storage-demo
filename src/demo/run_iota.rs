@@ -60,18 +60,16 @@ pub struct IotaNodeArgs {
 pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     let mut storage = None;
     if let Some(strg) = args.storage {
-        println!("Setting up storage... ");
         storage = Some(new_storage(
             &strg,
             args.storage_access_key,
             args.storage_secret_key,
             args.storage_endpoint,
         )?);
-        println!("OK");
+        log::trace!("Storage is set");
 
-        println!("Checking storage health... ");
         storage.clone().unwrap().health_check()?;
-        println!("OK");
+        log::trace!("Storage is healthy");
     }
 
     let suite = SuiteEd25519::new_blake3_sha256_ed25519();
@@ -83,7 +81,7 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     let signature = eddsa.sign(&document.to_bytes()?)?;
     let did_url = document.did_url();
     document.publish(&signature)?;
-    log::info!("Node's DID has been published, DID URL: {}", did_url);
+    log::info!("node's DID has been published, DID URL: {}", did_url);
 
     let is_completed = Arc::new(AtomicBool::new(false));
 
@@ -197,7 +195,7 @@ fn listen_governor_instructions(
         _ => panic!("unsupported network"),
     };
     let mut init_listener = Listener::new(net)?;
-    log::trace!("Listening on governor index");
+    log::info!("listening on governor index: {}", governor_index);
     let receiver = tokio::runtime::Runtime::new()?.block_on(init_listener.start(governor_index))?;
     loop {
         if let Some(data) = receiver.iter().next() {
@@ -205,7 +203,7 @@ fn listen_governor_instructions(
             if let Ok(message) = DkgInit::deserialize(&mut deserializer) {
                 for node in message.nodes.iter() {
                     if own_did == *node {
-                        log::trace!("Requested DKG from governor");
+                        log::info!("requested DKG from governor, committe's nodes: {:?}", message.nodes);
                         return Ok(message.nodes);
                     }
                 }

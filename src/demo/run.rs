@@ -134,7 +134,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
         did_url = Some(document.did_url());
         document.publish(&signature)?;
         log::info!(
-            "Node's DID has been published, DID URL: {}",
+            "node's DID has been published, DID URL: {}",
             did_url.clone().unwrap()
         );
     }

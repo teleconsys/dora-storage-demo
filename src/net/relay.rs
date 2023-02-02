@@ -43,12 +43,12 @@ impl<T: DeserializeOwned + Display, S: Sender<T>> ListenRelay<T, S> {
         let listener = match TcpListener::bind(SocketAddr::from(self.host.clone())) {
             Ok(v) => v,
             Err(e) => {
-                log::error!("Could not listen on port {}: {}", self.host.port(), e);
+                log::error!("could not listen on port {}: {}", self.host.port(), e);
                 return Err(e.into());
             }
         };
 
-        log::info!("Listeninig at {}", listener.local_addr()?);
+        log::info!("listeninig at {}", listener.local_addr()?);
         listener.set_nonblocking(true)?;
         for stream in listener.incoming() {
             if self.is_closed.load(Ordering::SeqCst) {
@@ -58,7 +58,7 @@ impl<T: DeserializeOwned + Display, S: Sender<T>> ListenRelay<T, S> {
                 Ok(stream) => self.handle_stream(stream)?,
                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
                 Err(e) => {
-                    log::error!("Could not get incoming stream: {}", e);
+                    log::error!("could not get incoming stream: {}", e);
                     return Err(e.into());
                 }
             }
@@ -68,14 +68,14 @@ impl<T: DeserializeOwned + Display, S: Sender<T>> ListenRelay<T, S> {
     }
 
     fn handle_stream(&self, mut stream: TcpStream) -> Result<()> {
-        log::info!("Receiving message from {}", &stream.peer_addr()?);
+        log::trace!("receiving message from {}", &stream.peer_addr()?);
         let mut buf = vec![];
         stream.read_to_end(&mut buf)?;
         let message = serde_json::from_slice(&buf)?;
-        log::trace!("Message received");
+        log::trace!("message received");
         let res = self.output.send(message);
         if let Err(e) = res {
-            log::error!("Could not relay message: {}", e);
+            log::error!("could not relay message: {}", e);
         }
         Ok(())
     }
@@ -126,10 +126,10 @@ impl<T: DeserializeOwned + Display, S: Sender<T> + 'static> IotaListenRelay<T, S
             let h = thread::spawn(move || {
                 for (data, id) in receiver {
                     if let Ok(message) = serde_json::from_slice(&data) {
-                        log::trace!("Message received");
+                        log::trace!("message received");
                         let res = output.send(message);
                         if let Err(e) = res {
-                            log::error!("Could not relay message: {}", e);
+                            log::error!("could not relay message: {}", e);
                         }
                     }
                 }
@@ -165,20 +165,20 @@ impl<T: Serialize, R: Receiver<T>> BroadcastRelay<T, R> {
                 .recv()
                 .map_err(|e| Error::msg(format!("{:?}", e)))?;
             log::trace!(
-                "Relaying message: {:?}",
+                "relaying message: {:?}",
                 serde_json::to_string(&message).unwrap()
             );
             let serialized = serde_json::to_string(&message)?;
 
             for destination in &self.destinations {
-                log::trace!("Sending to peer {}", destination);
+                log::trace!("sending to peer {}", destination);
                 match TcpStream::connect(destination) {
                     Ok(mut socket) => {
-                        log::trace!("Relaying message to {}", socket.peer_addr()?);
+                        log::trace!("relaying message to {}", socket.peer_addr()?);
                         socket.write_all(serialized.as_bytes())?;
                     }
                     Err(e) => {
-                        log::error!("Could not connect to destination {}: {}", destination, e);
+                        log::error!("could not connect to destination {}: {}", destination, e);
                     }
                 }
             }

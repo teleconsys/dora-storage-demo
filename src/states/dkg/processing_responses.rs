@@ -55,7 +55,7 @@ impl State<DkgTypes> for ProcessingResponses {
     fn deliver(&mut self, message: DkgMessage) -> DeliveryStatus<DkgMessage> {
         match message {
             DkgMessage::Response { source, .. } if source == self.dkg.pubb => {
-                log::trace!("Skipping own response");
+                log::trace!("skipping own response");
                 DeliveryStatus::Delivered
             }
             DkgMessage::Response { response, .. } => match self.dkg.process_response(&response) {
