@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::str::{FromStr, Utf8Error};
 use std::sync::mpsc::{Receiver, Sender};
 
@@ -25,6 +26,7 @@ use kyber_rs::group::edwards25519::{Scalar, SuiteEd25519};
 use kyber_rs::share::dkg::rabin::DistKeyGenerator;
 use kyber_rs::sign::eddsa::{self, EdDSA};
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 use crate::states::sign::{self, SignMessage, SignTerminalStates, SignTypes, Signature};
 use kyber_rs::{group::edwards25519::Point, util::key::Pair};
@@ -603,7 +605,7 @@ impl ApiNode {
                     .map_err(ApiNodeError::StorageError)?,
             },
             InputUri::Literal(s) => s.as_bytes().to_vec(),
-            InputUri::Url(_) => todo!(),
+            InputUri::Url(u) => get_data_from_url(u)?,
         };
         Ok(data)
     }
@@ -637,6 +639,14 @@ impl ApiNode {
     }
 }
 
+fn get_data_from_url(url: &Url) -> Result<Vec<u8>, ApiNodeError> {
+    let mut body = Vec::new();
+    let _ = reqwest::blocking::get(url.as_str())
+        .map_err(|e| ApiNodeError::HttpError(anyhow::Error::msg(format!("{}", e))))?
+        .read_to_end(&mut body)?;
+    Ok(body)
+}
+
 type FSM<'a> = StateMachine<'a, SignTypes, &'a Receiver<MessageWrapper<SignMessage>>>;
 
 #[derive(Debug, EnumDisplay)]
@@ -650,6 +660,7 @@ pub enum ApiNodeError {
     SignatureError(anyhow::Error),
     ConversionError(Utf8Error),
     LogError(anyhow::Error),
+    HttpError(anyhow::Error),
 }
 
 impl std::error::Error for ApiNodeError {}
