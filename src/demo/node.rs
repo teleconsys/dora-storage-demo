@@ -3,7 +3,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use crate::api::routes::delete::{DeleteRequest, DeleteResponse};
 use crate::api::routes::get::{GetError, GetRequest, GetResponse};
-use crate::api::routes::request::{self, GenericResponse};
+use crate::api::routes::request::{self, DoraLocalUri, GenericResponse, InputUri, IotaMessageUri};
 use crate::api::routes::save::{StoreError, StoreRequest, StoreResponse};
 use crate::api::routes::{GenericRequest, NodeMessage};
 use crate::did::{new_document, resolve_document};
@@ -429,23 +429,12 @@ impl ApiNode {
         sign_input: &Receiver<MessageWrapper<SignMessage>>,
         sign_output: &Sender<MessageWrapper<SignMessage>>,
     ) -> Result<(GenericResponse, Vec<String>), ApiNodeError> {
-        let rt = tokio::runtime::Runtime::new()?;
-
-        let message_id = MessageId::from_str(&request.message_id)
-            .map_err(|e| ApiNodeError::InvalidMessageId(e.into()))?;
-        let message = rt.block_on(self.iota_client.get_message().data(&message_id))?;
-        let payload = match message.payload() {
-            Some(p) => p,
-            None => return Err(ApiNodeError::MissingPayload(message_id)),
-        };
-        let indexation_payload = match payload {
-            iota_client::bee_message::prelude::Payload::Indexation(i) => i,
-            _ => return Err(ApiNodeError::UnsupportedPayload),
-        };
-        match self
-            .storage
-            .put(request.message_id, indexation_payload.data())
-        {
+        let data = self.get_data(&request.input)?;
+        match self.storage.put(
+            serde_json::to_string(&request.storage_uri)
+                .map_err(|e| ApiNodeError::InvalidMessageId(anyhow::Error::msg(e)))?,
+            &data,
+        ) {
             Ok(()) => {
                 let mut resp = GenericResponse {
                     request_id: request::RequestId(session_id.to_owned()),
@@ -510,7 +499,7 @@ impl ApiNode {
         logger: NodeSignatureLogger,
         did_urls: Vec<String>,
     ) -> Result<(GenericResponse, Vec<String>), ApiNodeError> {
-        let data = match self.storage.get(request.message_id) {
+        let data = match self.get_data(&request.input) {
             Ok(d) => d,
             Err(e) => {
                 let mut resp = GenericResponse {
@@ -586,6 +575,37 @@ impl ApiNode {
             NodeMessage::DeleteResponse(response).try_into().unwrap(),
             vec![],
         ))
+    }
+
+    fn get_data(&self, location: &InputUri) -> Result<Vec<u8>, ApiNodeError> {
+        let data = match location {
+            InputUri::Iota(uri) => match uri {
+                IotaMessageUri(index) => {
+                    let rt = tokio::runtime::Runtime::new()?;
+                    let message_id = MessageId::from_str(index)
+                        .map_err(|e| ApiNodeError::InvalidMessageId(e.into()))?;
+                    let message = rt.block_on(self.iota_client.get_message().data(&message_id))?;
+                    let payload = match message.payload() {
+                        Some(p) => p,
+                        None => return Err(ApiNodeError::MissingPayload(message_id)),
+                    };
+                    let indexation_payload = match payload {
+                        iota_client::bee_message::prelude::Payload::Indexation(i) => i,
+                        _ => return Err(ApiNodeError::UnsupportedPayload),
+                    };
+                    indexation_payload.data().to_vec()
+                }
+            },
+            InputUri::Local(uri) => match uri {
+                DoraLocalUri(index) => self
+                    .storage
+                    .get(index.to_owned())
+                    .map_err(ApiNodeError::StorageError)?,
+            },
+            InputUri::Literal(s) => s.as_bytes().to_vec(),
+            InputUri::Url(_) => todo!(),
+        };
+        Ok(data)
     }
 
     fn get_sign_fsm<'a>(

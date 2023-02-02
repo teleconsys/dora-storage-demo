@@ -5,6 +5,7 @@ use enum_display::EnumDisplay;
 use iota_client::bee_message::prelude::Output;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
+use url::Url;
 
 use super::{
     get::{GetRequest, GetResponse},
@@ -12,17 +13,25 @@ use super::{
     NodeMessage,
 };
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct DoraLocalUri(pub String);
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct IotaIndexUri(String);
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct IotaMessageUri(pub String);
 
-#[derive(Deserialize, Debug, PartialEq, Eq)]
+impl ToString for IotaMessageUri {
+    fn to_string(&self) -> String {
+        format!("iota:message:{}", self.0)
+    }
+}
+
+#[derive(Clone, Deserialize, Debug, PartialEq, Eq)]
 pub enum InputUri {
     Iota(IotaMessageUri),
     Local(DoraLocalUri),
+    Literal(String),
+    Url(Url),
 }
 
 impl Serialize for InputUri {
@@ -39,6 +48,8 @@ impl Serialize for InputUri {
             InputUri::Local(ref local) => match local {
                 DoraLocalUri(index) => serializer.serialize_str(&format!("dora:local:{}", index)),
             },
+            InputUri::Literal(s) => serializer.serialize_str(&format!("literal:string:{}", s)),
+            InputUri::Url(u) => serializer.serialize_str(u.as_str()),
         }
     }
 }
@@ -254,7 +265,7 @@ impl Default for OutputUri {
     }
 }
 
-#[derive(Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Deserialize, Debug, PartialEq, Eq)]
 pub enum StorageUri {
     None,
     Dora(DoraLocalUri),
@@ -328,7 +339,7 @@ fn test_generic_get_request() {
 
     assert!(matches!(
         node_message,
-        NodeMessage::GetRequest(GetRequest { message_id }) if message_id == "asdf"
+        NodeMessage::GetRequest(GetRequest { input }) if input == InputUri::Local(DoraLocalUri("asdf".to_owned()))
     ))
 }
 
@@ -355,7 +366,7 @@ fn test_generic_store_request() {
 
     assert!(matches!(
         node_message,
-        NodeMessage::StoreRequest(StoreRequest { message_id }) if message_id == "asdf"
+        NodeMessage::StoreRequest(StoreRequest { input, storage_uri }) if input == InputUri::Iota(IotaMessageUri("asdf".to_owned()))
     ))
 }
 
@@ -418,32 +429,29 @@ impl TryFrom<NodeMessage> for GenericResponse {
 pub enum GenericRequestParsingError {
     RequestNotSupported,
     LocalInputInStoreRequest,
-    DifferentIndexInStoreInputAndStorage,
 }
 
 impl TryInto<NodeMessage> for GenericRequest {
     type Error = GenericRequestParsingError;
 
     fn try_into(self) -> Result<NodeMessage, Self::Error> {
-        if let InputUri::Local(DoraLocalUri(index)) = self.input {
-            return Ok(NodeMessage::GetRequest(GetRequest { message_id: index }));
+        if let InputUri::Local(DoraLocalUri(..)) = self.input {
+            return Ok(NodeMessage::GetRequest(GetRequest { input: self.input }));
         }
 
-        if let StorageUri::Dora(DoraLocalUri(storage_index)) = self.store {
+        if let StorageUri::Dora(DoraLocalUri(..)) = self.store {
             match self.input {
-                InputUri::Iota(IotaMessageUri(index)) => {
-                    if index != storage_index {
-                        return Err(
-                            GenericRequestParsingError::DifferentIndexInStoreInputAndStorage,
-                        );
-                    }
+                InputUri::Iota(IotaMessageUri(..)) => {
                     return Ok(NodeMessage::StoreRequest(StoreRequest {
-                        message_id: index,
+                        input: self.input,
+                        storage_uri: self.store,
                     }));
                 }
                 InputUri::Local(_) => {
                     return Err(GenericRequestParsingError::LocalInputInStoreRequest)
                 }
+                InputUri::Literal(_) => todo!(),
+                InputUri::Url(_) => todo!(),
             }
         }
 

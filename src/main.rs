@@ -158,13 +158,14 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
         ApiAction::Store => {
             let message_id = args.message_id.clone();
             let request = NodeMessage::StoreRequest(api::routes::save::StoreRequest {
-                message_id: args.message_id,
+                input: InputUri::Iota(IotaMessageUri(args.message_id.clone())),
+                storage_uri: StorageUri::Dora(DoraLocalUri(args.message_id)),
             });
             serde_json::to_vec(&request)?
         }
         ApiAction::Get => {
             let request = NodeMessage::GetRequest(api::routes::get::GetRequest {
-                message_id: args.message_id,
+                input: InputUri::Iota(IotaMessageUri(args.message_id)),
             });
             serde_json::to_vec(&request)?
         }
@@ -199,17 +200,5 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
     let result = rt.block_on(publisher.publish(&request, Some(args.index)))?;
     println!("{}", result);
-    Ok(())
-}
-
-#[test]
-fn test_serde() -> Result<()> {
-    let message = NodeMessage::StoreRequest(api::routes::save::StoreRequest {
-        message_id: "asfd".to_owned(),
-    });
-
-    let encoded = serde_json::to_vec(&message)?;
-    let decoded: NodeMessage = serde_json::from_slice(&encoded)?;
-    assert_eq!(message.to_string(), decoded.to_string());
     Ok(())
 }

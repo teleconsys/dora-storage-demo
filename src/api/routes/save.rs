@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::routes::{listen_for_message, AppData, NodeMessage};
 
-use super::CommunicationError;
+use super::{
+    request::{InputUri, IotaMessageUri, StorageUri},
+    CommunicationError,
+};
 
 #[put("/save")]
 pub async fn save(
@@ -13,7 +16,8 @@ pub async fn save(
 ) -> Result<web::Json<StoreResponse>, StoreRequestError> {
     data.nodes_sender
         .send(NodeMessage::StoreRequest(StoreRequest {
-            message_id: req_body.message_id.clone(),
+            input: req_body.input.clone(),
+            storage_uri: req_body.storage_uri.clone(),
         }))
         .map_err(CommunicationError::Send)?;
     let nodes_response =
@@ -23,15 +27,16 @@ pub async fn save(
         })
         .await?;
     let response = StoreResponse::Success(format!(
-        "Saved message with id {}: {}",
-        req_body.message_id, nodes_response
+        "Saved message with id {:?}: {}",
+        &req_body.0.input, nodes_response
     ));
     Ok(actix_web::web::Json(response))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoreRequest {
-    pub message_id: String,
+    pub input: InputUri,
+    pub storage_uri: StorageUri,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
