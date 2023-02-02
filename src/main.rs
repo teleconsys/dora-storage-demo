@@ -69,8 +69,14 @@ struct ApiSendArgs {
     #[arg(required = true, long, help = "action")]
     action: ApiAction,
 
-    #[arg(required = true, long, help = "message id")]
+    #[arg(long, help = "message id", default_value = "")]
     message_id: String,
+
+    #[arg(required = true, long, help = "input uri")]
+    input_uri: String,
+
+    #[arg(long, help = "storage id", default_value = None)]
+    storage_id: Option<String>,
 
     #[arg(required = true, long, help = "index")]
     index: String,
@@ -81,6 +87,7 @@ enum ApiAction {
     Store,
     Get,
     Delete,
+    Generic,
     GenericGet,
     GenericStore,
 }
@@ -91,6 +98,7 @@ impl FromStr for ApiAction {
             "store" => Ok(ApiAction::Store),
             "get" => Ok(ApiAction::Get),
             "delete" => Ok(ApiAction::Delete),
+            "generic" => Ok(ApiAction::Generic),
             "generic-get" => Ok(ApiAction::GenericGet),
             "generic-store" => Ok(ApiAction::GenericStore),
             _ => Err("not a valid action".to_owned()),
@@ -192,6 +200,20 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
                 execution: Execution::None,
                 signature: false,
                 store: StorageUri::Dora(DoraLocalUri(args.message_id)),
+            };
+            serde_json::to_vec(&request)?
+        }
+        ApiAction::Generic => {
+            let mut storage_id = StorageUri::None;
+            if let Some(id) = args.storage_id {
+                storage_id = StorageUri::Dora(DoraLocalUri(id));
+            }
+            let request = GenericRequest {
+                input: InputUri::from_str(&args.input_uri).unwrap(),
+                output: OutputUri::None,
+                execution: Execution::None,
+                signature: false,
+                store: storage_id,
             };
             serde_json::to_vec(&request)?
         }

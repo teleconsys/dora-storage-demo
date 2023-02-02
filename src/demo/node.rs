@@ -4,7 +4,9 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use crate::api::routes::delete::{DeleteRequest, DeleteResponse};
 use crate::api::routes::get::{GetError, GetRequest, GetResponse};
-use crate::api::routes::request::{self, DoraLocalUri, GenericResponse, InputUri, IotaMessageUri};
+use crate::api::routes::request::{
+    self, DoraLocalUri, GenericResponse, InputUri, IotaMessageUri, StorageUri,
+};
 use crate::api::routes::save::{StoreError, StoreRequest, StoreResponse};
 use crate::api::routes::{GenericRequest, NodeMessage};
 use crate::did::{new_document, resolve_document};
@@ -432,63 +434,65 @@ impl ApiNode {
         sign_output: &Sender<MessageWrapper<SignMessage>>,
     ) -> Result<(GenericResponse, Vec<String>), ApiNodeError> {
         let data = self.get_data(&request.input)?;
-        match self.storage.put(
-            serde_json::to_string(&request.storage_uri)
-                .map_err(|e| ApiNodeError::InvalidMessageId(anyhow::Error::msg(e)))?,
-            &data,
-        ) {
-            Ok(()) => {
-                let mut resp = GenericResponse {
-                    request_id: request::RequestId(session_id.to_owned()),
-                    result: request::ResponseState::Success,
-                    signature: request::Signature(vec![]),
-                    output_location: None,
-                    data: None,
-                };
-                let temp_resp_bytes = resp.to_jcs().unwrap();
-                let mut sign_fsm = self.get_sign_fsm(
-                    &temp_resp_bytes,
-                    session_id.to_string(),
-                    sign_input,
-                    sign_output,
-                )?;
-                let final_state = match sign_fsm.run() {
-                    Ok(state) => state,
-                    Err(e) => return Err(ApiNodeError::SignatureError(e)),
-                };
-                let (signature, working_nodes) =
-                    manage_signature_terminal_state(final_state, session_id, did_urls, logger)
-                        .map_err(ApiNodeError::SignatureError)?;
-                resp.signature = request::Signature(signature.0);
+        if let StorageUri::Dora(DoraLocalUri(item_name)) = request.storage_uri {
+            match self.storage.put(item_name, &data) {
+                Ok(()) => {
+                    let mut resp = GenericResponse {
+                        request_id: request::RequestId(session_id.to_owned()),
+                        result: request::ResponseState::Success,
+                        signature: request::Signature(vec![]),
+                        output_location: None,
+                        data: None,
+                    };
+                    let temp_resp_bytes = resp.to_jcs().unwrap();
+                    let mut sign_fsm = self.get_sign_fsm(
+                        &temp_resp_bytes,
+                        session_id.to_string(),
+                        sign_input,
+                        sign_output,
+                    )?;
+                    let final_state = match sign_fsm.run() {
+                        Ok(state) => state,
+                        Err(e) => return Err(ApiNodeError::SignatureError(e)),
+                    };
+                    let (signature, working_nodes) =
+                        manage_signature_terminal_state(final_state, session_id, did_urls, logger)
+                            .map_err(ApiNodeError::SignatureError)?;
+                    resp.signature = request::Signature(signature.0);
 
-                Ok((resp, working_nodes))
-            }
-            Err(_) => {
-                let mut resp = GenericResponse {
-                    request_id: request::RequestId(session_id.to_owned()),
-                    result: request::ResponseState::Failure,
-                    signature: request::Signature(vec![]),
-                    output_location: None,
-                    data: None,
-                };
-                let temp_resp_bytes = resp.to_jcs().unwrap();
-                let mut sign_fsm = self.get_sign_fsm(
-                    &temp_resp_bytes,
-                    session_id.to_string(),
-                    sign_input,
-                    sign_output,
-                )?;
-                let final_state = match sign_fsm.run() {
-                    Ok(state) => state,
-                    Err(e) => return Err(ApiNodeError::SignatureError(e)),
-                };
-                let (signature, working_nodes) =
-                    manage_signature_terminal_state(final_state, session_id, did_urls, logger)
-                        .map_err(ApiNodeError::SignatureError)?;
-                resp.signature = request::Signature(signature.0);
+                    Ok((resp, working_nodes))
+                }
+                Err(_) => {
+                    let mut resp = GenericResponse {
+                        request_id: request::RequestId(session_id.to_owned()),
+                        result: request::ResponseState::Failure,
+                        signature: request::Signature(vec![]),
+                        output_location: None,
+                        data: None,
+                    };
+                    let temp_resp_bytes = resp.to_jcs().unwrap();
+                    let mut sign_fsm = self.get_sign_fsm(
+                        &temp_resp_bytes,
+                        session_id.to_string(),
+                        sign_input,
+                        sign_output,
+                    )?;
+                    let final_state = match sign_fsm.run() {
+                        Ok(state) => state,
+                        Err(e) => return Err(ApiNodeError::SignatureError(e)),
+                    };
+                    let (signature, working_nodes) =
+                        manage_signature_terminal_state(final_state, session_id, did_urls, logger)
+                            .map_err(ApiNodeError::SignatureError)?;
+                    resp.signature = request::Signature(signature.0);
 
-                Ok((resp, working_nodes))
+                    Ok((resp, working_nodes))
+                }
             }
+        } else {
+            Err(ApiNodeError::StorageError(anyhow::Error::msg(
+                "Storage not supported",
+            )))
         }
     }
 

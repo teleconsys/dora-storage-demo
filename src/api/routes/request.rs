@@ -18,6 +18,7 @@ pub struct DoraLocalUri(pub String);
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct IotaIndexUri(String);
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+
 pub struct IotaMessageUri(pub String);
 
 impl ToString for IotaMessageUri {
@@ -248,6 +249,17 @@ impl FromStr for InputUri {
             return Ok(InputUri::Local(uri));
         }
 
+        {
+            let parts: Vec<_> = s.split(':').collect();
+            if let ("literal", "string") = (parts[0], parts[1]) {
+                return Ok(InputUri::Literal(parts[2..].join(":")));
+            }
+        }
+
+        if let Ok(uri) = Url::from_str(s) {
+            return Ok(InputUri::Url(uri));
+        }
+
         Err(UriDeserializeError::InvalidUri)
     }
 }
@@ -435,24 +447,13 @@ impl TryInto<NodeMessage> for GenericRequest {
     type Error = GenericRequestParsingError;
 
     fn try_into(self) -> Result<NodeMessage, Self::Error> {
-        if let InputUri::Local(DoraLocalUri(..)) = self.input {
-            return Ok(NodeMessage::GetRequest(GetRequest { input: self.input }));
-        }
-
         if let StorageUri::Dora(DoraLocalUri(..)) = self.store {
-            match self.input {
-                InputUri::Iota(IotaMessageUri(..)) => {
-                    return Ok(NodeMessage::StoreRequest(StoreRequest {
-                        input: self.input,
-                        storage_uri: self.store,
-                    }));
-                }
-                InputUri::Local(_) => {
-                    return Err(GenericRequestParsingError::LocalInputInStoreRequest)
-                }
-                InputUri::Literal(_) => todo!(),
-                InputUri::Url(_) => todo!(),
-            }
+            return Ok(NodeMessage::StoreRequest(StoreRequest {
+                input: self.input,
+                storage_uri: self.store,
+            }));
+        } else {
+            return Ok(NodeMessage::GetRequest(GetRequest { input: self.input }));
         }
 
         Err(GenericRequestParsingError::RequestNotSupported)
