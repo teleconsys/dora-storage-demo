@@ -252,7 +252,7 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
     };
     let publisher = Publisher::new(Network::Mainnet, None)?;
     let rt = tokio::runtime::Runtime::new()?;
-    let result = rt.block_on(publisher.publish(&request, Some(args.governor_index)))?;
+    let result = rt.block_on(publisher.publish(&request, Some(args.committee_index)))?;
     println!("{}", result);
     Ok(())
 }
