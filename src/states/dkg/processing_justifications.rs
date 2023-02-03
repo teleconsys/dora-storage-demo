@@ -47,11 +47,11 @@ impl State<DkgTypes> for ProcessingJustifications {
 
     fn advance(&mut self) -> Result<Transition<DkgTypes>, anyhow::Error> {
         if !self.dkg.certified() {
-            bail!("Deal not certified")
+            bail!("deal not certified")
         }
         if self.dkg.participants.len() != self.dkg.qual().len() {
             bail!(
-                "Only {} nodes are qualified out of {}",
+                "only {} nodes are qualified out of {}",
                 self.dkg.qual().len(),
                 self.dkg.participants.len()
             )
@@ -69,7 +69,7 @@ impl State<DkgTypes> for ProcessingJustifications {
 impl Display for ProcessingJustifications {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
-            "Processing justifications (own: {})",
+            "processing justifications (own: {})",
             self.own_justifications.len()
         ))
     }

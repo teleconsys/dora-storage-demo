@@ -23,7 +23,7 @@ pub struct InitializingIota {
 
 impl Display for InitializingIota {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("Initializing (nodes: {})", self.num_participants))
+        f.write_str(&format!("initializing (nodes: {})", self.num_participants))
     }
 }
 
@@ -80,3 +80,4 @@ impl State<DkgTypes> for InitializingIota {
         }
     }
 }
+

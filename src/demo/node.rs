@@ -9,7 +9,7 @@ use crate::api::routes::request::{
 };
 use crate::api::routes::save::{StoreError, StoreRequest, StoreResponse};
 use crate::api::routes::{GenericRequest, NodeMessage};
-use crate::demo::node;
+use crate::demo::{node, generic_log_target};
 use crate::did::{new_document, resolve_document};
 use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates, Initializing};
 use crate::dlt::iota::{Listener, Publisher};
@@ -182,7 +182,7 @@ impl Node {
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
-        let dkg_id = "First DKG";
+        let dkg_id = "dkg";
         let dkg_initial_state = InitializingIota::new(
             self.keypair.clone(),
             own_did_url.clone(),
@@ -244,7 +244,7 @@ impl Node {
         {
             // Publish DKG signature log
             let (mut dkg_log, mut working_nodes) = new_signature_log(
-                "First DKG".to_string(),
+                "dkg".to_string(),
                 processed_partial_owners,
                 bad_signers,
                 did_urls.clone(),
@@ -729,7 +729,8 @@ impl NodeSignatureLogger {
 
         let msg_id = tokio::runtime::Runtime::new()?
             .block_on(publisher.publish(&log.to_jcs()?, Some(self.committee_index.clone())))?;
-        log::info!("[{}] log published (msg_id: {})", log.session_id, msg_id);
+        log::info!(target: &generic_log_target(&log.session_id),
+            "log published (msg_id: {})", msg_id);
         Ok(())
     }
 
@@ -782,7 +783,8 @@ pub fn new_signature_log(
         }
     }
 
-    log::info!("[{}] signature success \n\t nodes that didn't participate: {:?} \n\t nodes that didn't provide a correct signature: {:?}", session_id, absent_nodes, bad_signers_nodes);
+    log::info!(target: &generic_log_target(&session_id),
+        "signature success \n\t nodes that didn't participate: {:?} \n\t nodes that didn't provide a correct signature: {:?}", absent_nodes, bad_signers_nodes);
     Ok((
         NodeSignatureLog {
             session_id,
@@ -836,7 +838,8 @@ fn manage_signature_terminal_state(
             Ok((signature, working_nodes))
         }
         SignTerminalStates::Failed => {
-            log::error!("[{}] signature failed", session_id);
+            log::error!(target: &generic_log_target(session_id),
+                "signature failed");
             Err(anyhow::Error::msg("Sign Failed"))
         }
     }

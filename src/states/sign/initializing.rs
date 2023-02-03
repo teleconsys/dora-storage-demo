@@ -197,7 +197,8 @@ impl State<SignTypes> for Initializing {
                 let session_id = self.session_id.clone();
                 let sender = self.sender.clone();
 
-                log::info!("[{}] starting partial signatures countdown, {} seconds", session_id, sleep_time);
+                log::info!(target: &log_target(&self.session_id),
+                    "starting partial signatures countdown, {} seconds", sleep_time);
                 thread::spawn(move || {
                     // sleeps to give time to the missing nodes
                     
@@ -266,10 +267,15 @@ impl State<SignTypes> for Initializing {
                         self.bad_signers.clone(),
                     )))
                 } else {
-                    log::info!("[{}]  partial signatures timeout", self.session_id);
+                    log::info!(target: &log_target(&self.session_id),
+                        "partial signatures timeout");
                     Ok(Transition::Terminal(SignTerminalStates::Failed))
                 }
             }
         }
     }
+}
+
+fn log_target(session_id: &str) -> String {
+    format!("fsm:{}:signature", session_id.chars().take(10).collect::<String>())
 }

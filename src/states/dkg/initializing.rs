@@ -25,7 +25,7 @@ pub struct Initializing {
 
 impl Display for Initializing {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("Initializing (nodes: {})", self.num_participants))
+        f.write_str(&format!("initializing (nodes: {})", self.num_participants))
     }
 }
 

@@ -33,3 +33,7 @@ pub enum DkgTerminalStates {
 }
 
 pub type DistPublicKey = Point;
+
+pub(crate) fn log_target() -> String {
+    "fsm:dkg".to_owned()
+}
