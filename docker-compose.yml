@@ -62,6 +62,7 @@ services:
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
       - "--did-network=iota-main"
+      #- "--node-url=https://iota-n1.teleconsys.it/"
 
   dora-storage-2:
     container_name: d2
@@ -84,6 +85,7 @@ services:
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
       - "--did-network=iota-main"
+      #- "--node-url=https://iota-n1.teleconsys.it/"
 
   dora-storage-3:
     container_name: d3
@@ -106,6 +108,7 @@ services:
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
       - "--did-network=iota-main"
+      #- "--node-url=https://iota-n1.teleconsys.it/"
 
 
 #### minio volumes

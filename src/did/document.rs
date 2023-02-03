@@ -42,11 +42,11 @@ pub fn new_document(
     Ok(document)
 }
 
-pub fn resolve_document(did_url: String) -> Result<Document> {
+pub fn resolve_document(did_url: String, node_url: Option<String>) -> Result<Document> {
     let did_network: Vec<&str> = did_url.split(':').collect();
     let document: Document = match did_network[1] {
         "iota" => {
-            let doc = resolve_did(did_url)?;
+            let doc = resolve_did(did_url, node_url)?;
             Document::IotaDocument {
                 document: doc.clone(),
                 network: doc.id().network_str().to_owned(),
@@ -59,12 +59,12 @@ pub fn resolve_document(did_url: String) -> Result<Document> {
 }
 
 impl Document {
-    pub fn publish(self, signature: &[u8]) -> Result<()> {
+    pub fn publish(self, signature: &[u8], node_url: Option<String>) -> Result<()> {
         match self {
             Document::IotaDocument {
                 mut document,
                 network,
-            } => publish_did(&mut document, signature, network)?,
+            } => publish_did(&mut document, signature, network, node_url)?,
         };
         Ok(())
     }

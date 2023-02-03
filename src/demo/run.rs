@@ -52,6 +52,9 @@ pub struct NodeArgs {
 
     #[arg(long = "signature-sleep-time", default_value = "5")]
     signature_sleep_time: u64,
+    
+    #[arg(long = "node-url", default_value = None)]
+    node_url: Option<String>,
 }
 
 pub fn run_node(args: NodeArgs) -> Result<()> {
@@ -132,7 +135,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
         let document = new_document(&eddsa.public.marshal_binary()?, &network, None, None)?;
         let signature = eddsa.sign(&document.to_bytes()?)?;
         did_url = Some(document.did_url());
-        document.publish(&signature)?;
+        document.publish(&signature, args.node_url.clone())?;
         log::info!(
             "node's DID has been published, DID URL: {}",
             did_url.clone().unwrap()
@@ -146,6 +149,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
         3,
         sign_input_channel_sender,
         args.signature_sleep_time,
+        args.node_url
     )?;
 
     is_completed.store(true, Ordering::SeqCst);

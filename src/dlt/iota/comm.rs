@@ -17,13 +17,13 @@ use super::client::iota_client;
 
 pub struct Listener(Client);
 
-pub fn new_listener(network: &str) -> Result<Listener> {
-    Ok(Listener(iota_client(network)?))
+pub fn new_listener(network: &str, node_url: Option<String>) -> Result<Listener> {
+    Ok(Listener(iota_client(network, node_url)?))
 }
 
 impl Listener {
-    pub fn new(network: Network) -> Result<Self> {
-        new_listener(network.name_str())
+    pub fn new(network: Network, node_url: Option<String>) -> Result<Self> {
+        new_listener(network.name_str(), node_url)
     }
 
     pub async fn start(&mut self, index: String) -> Result<Receiver<(Vec<u8>, MessageId)>> {
@@ -71,13 +71,13 @@ impl Listener {
 
 pub struct Publisher(Client);
 
-pub fn new_publisher(network: &str) -> Result<Publisher> {
-    Ok(Publisher(iota_client(network)?))
+pub fn new_publisher(network: &str, node_url: Option<String>) -> Result<Publisher> {
+    Ok(Publisher(iota_client(network, node_url)?))
 }
 
 impl Publisher {
-    pub fn new(network: Network) -> Result<Self> {
-        new_publisher(network.name_str())
+    pub fn new(network: Network, node_url: Option<String>) -> Result<Self> {
+        new_publisher(network.name_str(), node_url)
     }
 
     pub async fn publish(&self, data: &[u8], index: Option<String>) -> Result<String> {

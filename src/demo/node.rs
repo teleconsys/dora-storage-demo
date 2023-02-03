@@ -92,11 +92,12 @@ impl Node {
         num_participants: usize,
         signature_sender: Sender<MessageWrapper<SignMessage>>,
         signature_sleep_time: u64,
+        node_url: Option<String>
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let dkg_id = "First DKG";
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
-        let dkg_initial_state = Initializing::new(self.keypair.clone(), did_url, num_participants);
+        let dkg_initial_state = Initializing::new(self.keypair.clone(), did_url, num_participants, node_url.clone());
         let dkg_feed = Feed::new(&self.dkg_input_channel, dkg_id.to_string());
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
@@ -150,10 +151,10 @@ impl Node {
             if did_network.is_some() {
                 // Publish signed DID
                 let did_url = document.did_url();
-                document.publish(&signature.to_vec())?;
+                document.publish(&signature.to_vec(), node_url.clone())?;
                 log::info!("committee's DID has been published, DID URL: {}", did_url);
 
-                let resolved_did = resolve_document(did_url.clone())?;
+                let resolved_did = resolve_document(did_url.clone(), node_url.clone())?;
 
                 if let Some(strg) = storage {
                     strg.put(did_url, &resolved_did.to_bytes()?)?;
@@ -177,6 +178,7 @@ impl Node {
         time_resolution: usize,
         signature_sender: Sender<MessageWrapper<SignMessage>>,
         signature_sleep_time: u64,
+        node_url: Option<String>
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
@@ -186,6 +188,7 @@ impl Node {
             own_did_url.clone(),
             did_urls,
             num_participants,
+            node_url.clone()
         )?;
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
@@ -245,13 +248,14 @@ impl Node {
                 processed_partial_owners,
                 bad_signers,
                 did_urls.clone(),
+                node_url.clone()
             )?;
-            iota_logger.publish(&mut dkg_log)?;
+            iota_logger.publish(&mut dkg_log, node_url.clone())?;
 
             // Publish signed DID if the node is the first on the list
             working_nodes.sort();
             if own_did_url == working_nodes[0] {
-                document.publish(&signature.to_vec())?;
+                document.publish(&signature.to_vec(), node_url.clone())?;
                 log::info!("committee's DID has been published, DID URL: {}", did_url);
                 //let resolved_did = resolve_document(did_url.clone())?;
             }
@@ -266,6 +270,7 @@ impl Node {
                 signature_sleep_time,
                 iota_logger,
                 did_urls,
+                node_url.clone()
             )?;
             Ok((signature, dist_pub_key))
         } else {
@@ -280,6 +285,7 @@ impl Node {
                 signature_sleep_time,
                 iota_logger,
                 did_urls,
+                node_url.clone()
             )?;
             Ok((Signature::from(vec![]), dist_pub_key))
         }
@@ -296,6 +302,7 @@ impl Node {
         signature_sleep_time: u64,
         logger: NodeSignatureLogger,
         did_urls: Vec<String>,
+        node_url: Option<String>
     ) -> Result<(), anyhow::Error> {
         let network = match network_name.as_str() {
             "iota-main" => Network::Mainnet,
@@ -303,11 +310,11 @@ impl Node {
             _ => panic!("unsupported network"),
         };
         let api_index = did_url.split(':').last().unwrap();
-        let mut api_input = Listener::new(network.clone())?;
-        let api_output = Publisher::new(network.clone())?;
+        let mut api_input = Listener::new(network.clone(), node_url.clone())?;
+        let api_output = Publisher::new(network.clone(), node_url.clone())?;
         let api_node = ApiNode {
             storage: storage.unwrap(),
-            iota_client: crate::dlt::iota::client::iota_client(network.name_str())?,
+            iota_client: crate::dlt::iota::client::iota_client(network.name_str(), node_url.clone())?,
             dkg,
             secret: self.keypair.private.clone(),
             public_key: self.keypair.public.clone(),
@@ -340,6 +347,7 @@ impl Node {
                     &req_id.to_string(),
                     logger.clone(),
                     did_urls.clone(),
+                    node_url.clone()
                 )
                 .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))
             {
@@ -366,9 +374,9 @@ impl Node {
     }
 }
 
-fn public_to_did(did_urls: &[String], public_key: Point) -> anyhow::Result<String> {
+fn public_to_did(did_urls: &[String], public_key: Point, node_url: Option<String>) -> anyhow::Result<String> {
     for did_url in did_urls.iter() {
-        if resolve_document(did_url.to_string())?.public_key()? == public_key {
+        if resolve_document(did_url.to_string(), node_url.clone())?.public_key()? == public_key {
             return Ok(did_url.to_string());
         }
     }
@@ -395,6 +403,7 @@ impl ApiNode {
         session_id: &str,
         signature_logger: NodeSignatureLogger,
         did_urls: Vec<String>,
+        node_url: Option<String>
     ) -> Result<Option<(GenericResponse, Vec<String>)>, ApiNodeError> {
         match message {
             NodeMessage::StoreRequest(r) => Ok(Some(self.handle_store_request(
@@ -404,6 +413,7 @@ impl ApiNode {
                 did_urls,
                 nodes_input,
                 nodes_output,
+                node_url
             )?)),
             NodeMessage::GetRequest(r) => Ok(Some(self.handle_get_request(
                 r,
@@ -412,6 +422,7 @@ impl ApiNode {
                 session_id,
                 signature_logger,
                 did_urls,
+                node_url
             )?)),
             NodeMessage::DeleteRequest(r) => Ok(Some(self.handle_delete_request(
                 r,
@@ -433,6 +444,7 @@ impl ApiNode {
         did_urls: Vec<String>,
         sign_input: &Receiver<MessageWrapper<SignMessage>>,
         sign_output: &Sender<MessageWrapper<SignMessage>>,
+        node_url: Option<String>
     ) -> Result<(GenericResponse, Vec<String>), ApiNodeError> {
         let data = self.get_data(&request.input)?;
         if let StorageUri::Dora(DoraLocalUri(item_name)) = request.storage_uri {
@@ -457,7 +469,7 @@ impl ApiNode {
                         Err(e) => return Err(ApiNodeError::SignatureError(e)),
                     };
                     let (signature, working_nodes) =
-                        manage_signature_terminal_state(final_state, session_id, did_urls, logger)
+                        manage_signature_terminal_state(final_state, session_id, did_urls, logger, node_url)
                             .map_err(ApiNodeError::SignatureError)?;
                     resp.signature = request::Signature(signature.0);
 
@@ -483,7 +495,7 @@ impl ApiNode {
                         Err(e) => return Err(ApiNodeError::SignatureError(e)),
                     };
                     let (signature, working_nodes) =
-                        manage_signature_terminal_state(final_state, session_id, did_urls, logger)
+                        manage_signature_terminal_state(final_state, session_id, did_urls, logger, node_url)
                             .map_err(ApiNodeError::SignatureError)?;
                     resp.signature = request::Signature(signature.0);
 
@@ -505,6 +517,7 @@ impl ApiNode {
         session_id: &str,
         logger: NodeSignatureLogger,
         did_urls: Vec<String>,
+        node_url: Option<String>
     ) -> Result<(GenericResponse, Vec<String>), ApiNodeError> {
         let data = match self.get_data(&request.input) {
             Ok(d) => d,
@@ -528,7 +541,7 @@ impl ApiNode {
                     Err(e) => return Err(ApiNodeError::SignatureError(e)),
                 };
                 let (signature, working_nodes) =
-                    manage_signature_terminal_state(final_state, session_id, did_urls, logger)
+                    manage_signature_terminal_state(final_state, session_id, did_urls, logger, node_url)
                         .map_err(ApiNodeError::SignatureError)?;
                 resp.signature = request::Signature(signature.0);
 
@@ -560,7 +573,7 @@ impl ApiNode {
             Err(e) => return Err(ApiNodeError::SignatureError(e)),
         };
         let (signature, working_nodes) =
-            manage_signature_terminal_state(final_state, session_id, did_urls, logger)
+            manage_signature_terminal_state(final_state, session_id, did_urls, logger, node_url)
                 .map_err(ApiNodeError::SignatureError)?;
         resp.signature = request::Signature(signature.0);
 
@@ -705,13 +718,13 @@ pub fn new_node_signature_logger(
 }
 
 impl NodeSignatureLogger {
-    pub fn publish(&self, log: &mut NodeSignatureLog) -> anyhow::Result<()> {
+    pub fn publish(&self, log: &mut NodeSignatureLog, node_url: Option<String>) -> anyhow::Result<()> {
         let network = match self.network.as_str() {
             "iota-main" => Network::Mainnet,
             "iota-dev" => Network::Devnet,
             _ => panic!("unsupported network"),
         };
-        let publisher = Publisher::new(network)?;
+        let publisher = Publisher::new(network, node_url)?;
         self.sign_log(log)?;
 
         let msg_id = tokio::runtime::Runtime::new()?
@@ -742,12 +755,13 @@ pub fn new_signature_log(
     processed_partial_owners: Vec<Point>,
     bad_signers: Vec<Point>,
     did_urls: Vec<String>,
+    node_url: Option<String>
 ) -> anyhow::Result<(NodeSignatureLog, Vec<String>)> {
 
     // find out who didn't send a partial signature
     let mut processed_partial_owners_dids = vec![];
     for owner in processed_partial_owners {
-        processed_partial_owners_dids.push(public_to_did(&did_urls, owner)?);
+        processed_partial_owners_dids.push(public_to_did(&did_urls, owner, node_url.clone())?);
     }
 
     let mut absent_nodes = did_urls.clone();
@@ -758,7 +772,7 @@ pub fn new_signature_log(
     // find out who was a bad signer
     let mut bad_signers_nodes = vec![];
     for owner in bad_signers {
-        bad_signers_nodes.push(public_to_did(&did_urls, owner)?);
+        bad_signers_nodes.push(public_to_did(&did_urls, owner, node_url.clone())?);
     }
 
     let mut working_nodes = vec![];
@@ -805,6 +819,7 @@ fn manage_signature_terminal_state(
     session_id: &str,
     did_urls: Vec<String>,
     logger: NodeSignatureLogger,
+    node_url: Option<String>
 ) -> anyhow::Result<(Signature, Vec<String>)> {
     match final_state {
         SignTerminalStates::Completed(signature, processed_partial_owners, bad_signers) => {
@@ -813,9 +828,10 @@ fn manage_signature_terminal_state(
                 processed_partial_owners,
                 bad_signers,
                 did_urls,
+                node_url.clone()
             )
             .map_err(ApiNodeError::LogError)?;
-            logger.publish(&mut log).map_err(ApiNodeError::LogError)?;
+            logger.publish(&mut log, node_url).map_err(ApiNodeError::LogError)?;
 
             Ok((signature, working_nodes))
         }

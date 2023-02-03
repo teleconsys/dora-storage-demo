@@ -86,6 +86,7 @@ pub struct IotaListenRelay<T, S: Sender<T>> {
     is_closed: Arc<AtomicBool>,
     indexes: Vec<String>,
     network: Network,
+    node_url: Option<String>,
     _phantom_data: PhantomData<T>,
 }
 
@@ -95,6 +96,7 @@ impl<T: DeserializeOwned + Display, S: Sender<T> + 'static> IotaListenRelay<T, S
         is_closed: Arc<AtomicBool>,
         indexes: Vec<String>,
         network: String,
+        node_url: Option<String>,
     ) -> Self {
         let net = match network.as_str() {
             "iota-main" => Network::Mainnet,
@@ -105,13 +107,14 @@ impl<T: DeserializeOwned + Display, S: Sender<T> + 'static> IotaListenRelay<T, S
             output,
             is_closed,
             indexes,
+            node_url,
             _phantom_data: PhantomData,
             network: net,
         }
     }
 
     pub fn listen(&self) -> Result<()> {
-        let mut listener = Listener::new(self.network.clone())?;
+        let mut listener = Listener::new(self.network.clone(), self.node_url.clone())?;
         let receivers: Vec<std::sync::mpsc::Receiver<(Vec<u8>, MessageId)>> = self
             .indexes
             .iter()
@@ -191,21 +194,23 @@ pub struct IotaBroadcastRelay<T, R: Receiver<T>> {
     index: String,
     publisher: Publisher,
     network: Network,
+    node_url: Option<String>,
     _phantom: PhantomData<T>,
 }
 
 impl<T: Serialize, R: Receiver<T>> IotaBroadcastRelay<T, R> {
-    pub fn new(index: String, input: R, network: String) -> Result<Self> {
+    pub fn new(index: String, input: R, network: String, node_url: Option<String>,) -> Result<Self> {
         let net = match network.as_str() {
             "iota-main" => Network::Mainnet,
             "iota-dev" => Network::Devnet,
             _ => panic!("unsupported network"),
         };
-        let publisher = Publisher::new(net.clone())?;
+        let publisher = Publisher::new(net.clone(), node_url.clone())?;
         Ok(IotaBroadcastRelay {
             input,
             index,
             publisher,
+            node_url,
             network: net,
             _phantom: PhantomData,
         })

@@ -218,7 +218,7 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
             serde_json::to_vec(&request)?
         }
     };
-    let publisher = Publisher::new(Network::Mainnet)?;
+    let publisher = Publisher::new(Network::Mainnet, None)?;
     let rt = tokio::runtime::Runtime::new()?;
     let result = rt.block_on(publisher.publish(&request, Some(args.index)))?;
     println!("{}", result);
