@@ -43,6 +43,7 @@ services:
 
   dora-storage-1:
     container_name: d1
+    tty: true
     image: giordyfish/test-dora-storage
     stop_grace_period: 5m
     restart: always
@@ -62,9 +63,11 @@ services:
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
       - "--did-network=iota-main"
+      #- "--node-url=https://iota-n1.teleconsys.it/"
 
   dora-storage-2:
     container_name: d2
+    tty: true
     image: giordyfish/test-dora-storage
     stop_grace_period: 5m
     restart: always
@@ -84,9 +87,11 @@ services:
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
       - "--did-network=iota-main"
+      #- "--node-url=https://iota-n1.teleconsys.it/"
 
   dora-storage-3:
     container_name: d3
+    tty: true
     image: giordyfish/test-dora-storage
     stop_grace_period: 5m
     restart: always
@@ -106,6 +111,7 @@ services:
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
       - "--did-network=iota-main"
+      #- "--node-url=https://iota-n1.teleconsys.it/"
 
 
 #### minio volumes

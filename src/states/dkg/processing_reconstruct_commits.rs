@@ -31,7 +31,7 @@ impl ProcessingReconstructCommits {
 impl Display for ProcessingReconstructCommits {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
-            "Processing Reconstruct Commits (own: {})",
+            "processing Reconstruct Commits (own: {})",
             self.reconstruct_commits.len()
         ))
     }

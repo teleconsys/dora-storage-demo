@@ -52,3 +52,4 @@ pub enum CommunicationError {
     Send(SendError<NodeMessage>),
     Receive(RecvError),
 }
+

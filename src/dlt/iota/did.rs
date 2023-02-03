@@ -93,6 +93,7 @@ pub fn publish_did(
     document: &mut IotaDocument,
     signature: &[u8],
     network_name: String,
+    node_url: Option<String>
 ) -> Result<()> {
     let sig_b58 = BaseEncoding::encode_base58(signature);
 
@@ -103,16 +104,16 @@ pub fn publish_did(
     // Verify signature
     document.verify_document(document)?;
 
-    let client = identity_client(&network_name)?;
+    let client = identity_client(&network_name, node_url)?;
     let r = tokio::runtime::Runtime::new()?;
     r.block_on(client.publish_document(document))?;
 
     Ok(())
 }
 
-pub fn resolve_did(did_url: String) -> Result<IotaDocument> {
+pub fn resolve_did(did_url: String, node_url: Option<String>) -> Result<IotaDocument> {
     let iota_did = IotaDID::parse(did_url)?;
-    let client = identity_client(iota_did.network_str())?;
+    let client = identity_client(iota_did.network_str(), node_url)?;
     let r = tokio::runtime::Runtime::new()?;
     let resolved_doc = r.block_on(client.resolve(&iota_did))?;
 

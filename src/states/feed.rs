@@ -72,8 +72,8 @@ pub struct MessageWrapper<T: Display + Serialize> {
 impl<T: Display + Serialize> Display for MessageWrapper<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
-            "Broadcasting session_id {}: {}",
-            &self.session_id.to_string()[..6],
+            "broadcasting session_id {}: {}",
+            &self.session_id.chars().take(10).collect::<String>(),
             self.message
         ))
     }

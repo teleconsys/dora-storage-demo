@@ -8,6 +8,7 @@ mod processing_reconstruct_commits;
 mod processing_responses;
 mod processing_secret_commits;
 
+use colored::Colorize;
 pub use initializing::Initializing;
 pub use initializing_iota::InitializingIota;
 use kyber_rs::{
@@ -33,3 +34,7 @@ pub enum DkgTerminalStates {
 }
 
 pub type DistPublicKey = Point;
+
+pub(crate) fn log_target() -> String {
+    format!("fsm:{}", "dkg".yellow())
+}

@@ -44,6 +44,9 @@ pub struct IotaNodeArgs {
     #[arg(long = "storage-secret-key", default_value = None)]
     storage_secret_key: Option<String>,
 
+    #[arg(long = "node-url", default_value = None)]
+    node_url: Option<String>,
+
     #[arg(long = "did-network", default_value = "iota-dev")]
     did_network: String,
 
@@ -60,18 +63,16 @@ pub struct IotaNodeArgs {
 pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     let mut storage = None;
     if let Some(strg) = args.storage {
-        println!("Setting up storage... ");
         storage = Some(new_storage(
             &strg,
             args.storage_access_key,
             args.storage_secret_key,
             args.storage_endpoint,
         )?);
-        println!("OK");
+        log::trace!("storage is set");
 
-        println!("Checking storage health... ");
         storage.clone().unwrap().health_check()?;
-        println!("OK");
+        log::trace!("storage is healthy");
     }
 
     let suite = SuiteEd25519::new_blake3_sha256_ed25519();
@@ -82,13 +83,13 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
     let document = new_document(&eddsa.public.marshal_binary()?, &network, None, None)?;
     let signature = eddsa.sign(&document.to_bytes()?)?;
     let did_url = document.did_url();
-    document.publish(&signature)?;
-    log::info!("Node's DID has been published, DID URL: {}", did_url);
+    document.publish(&signature, args.node_url.clone())?;
+    log::info!("node's DID has been published, DID URL: {}", did_url);
 
     let is_completed = Arc::new(AtomicBool::new(false));
 
     let mut all_dids =
-        listen_governor_instructions(args.governor, did_url.clone(), network.clone())?;
+        listen_governor_instructions(args.governor, did_url.clone(), network.clone(), args.node_url.clone())?;
 
     // get only peers dids
     let mut peers_dids = all_dids.clone();
@@ -111,11 +112,13 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
         is_completed.clone(),
         peers_indexes.clone(),
         args.did_network.clone(),
+        args.node_url.clone()
     );
     let mut dkg_broadcast_relay = IotaBroadcastRelay::new(
         own_idx.clone(),
         dkg_output_channel_receiver,
         args.did_network.clone(),
+        args.node_url.clone()
     )?;
 
     let dkg_listen_relay_handle = thread::spawn(move || dkg_listen_relay.listen());
@@ -129,11 +132,13 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
         is_completed.clone(),
         peers_indexes,
         args.did_network.clone(),
+        args.node_url.clone()
     );
     let mut sign_broadcast_relay = IotaBroadcastRelay::new(
         own_idx,
         sign_input_channel_receiver,
         args.did_network.clone(),
+        args.node_url.clone()
     )?;
 
     let sign_listen_relay_handle = thread::spawn(move || sign_listen_relay.listen());
@@ -166,6 +171,7 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
         args.time_resolution,
         sign_input_channel_sender,
         args.signature_sleep_time,
+        args.node_url
     )?;
 
     is_completed.store(true, Ordering::SeqCst);
@@ -190,14 +196,15 @@ fn listen_governor_instructions(
     governor_index: String,
     own_did: String,
     network: String,
+    node_url: Option<String>
 ) -> Result<Vec<String>> {
     let net = match network.as_str() {
         "iota-main" => Network::Mainnet,
         "iota-dev" => Network::Devnet,
         _ => panic!("unsupported network"),
     };
-    let mut init_listener = Listener::new(net)?;
-    log::trace!("Listening on governor index");
+    let mut init_listener = Listener::new(net, node_url)?;
+    log::info!("listening on governor index: {}", governor_index);
     let receiver = tokio::runtime::Runtime::new()?.block_on(init_listener.start(governor_index))?;
     loop {
         if let Some(data) = receiver.iter().next() {
@@ -205,7 +212,7 @@ fn listen_governor_instructions(
             if let Ok(message) = DkgInit::deserialize(&mut deserializer) {
                 for node in message.nodes.iter() {
                     if own_did == *node {
-                        log::trace!("Requested DKG from governor");
+                        log::info!("requested DKG from governor, committe's nodes: {:?}", message.nodes);
                         return Ok(message.nodes);
                     }
                 }

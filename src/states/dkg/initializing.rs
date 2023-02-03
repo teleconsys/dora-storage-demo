@@ -20,16 +20,17 @@ pub struct Initializing {
     num_participants: usize,
     public_keys: Vec<Point>,
     did_urls: Vec<String>,
+    node_url: Option<String>
 }
 
 impl Display for Initializing {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("Initializing (nodes: {})", self.num_participants))
+        f.write_str(&format!("initializing (nodes: {})", self.num_participants))
     }
 }
 
 impl Initializing {
-    pub fn new(key: Pair<Point>, did_url: Option<String>, num_participants: usize) -> Initializing {
+    pub fn new(key: Pair<Point>, did_url: Option<String>, num_participants: usize, node_url: Option<String>) -> Initializing {
         let mut public_keys = Vec::with_capacity(num_participants);
         public_keys.push(key.public.clone());
         let mut did_urls = Vec::with_capacity(num_participants);
@@ -42,6 +43,7 @@ impl Initializing {
             num_participants,
             public_keys,
             did_urls,
+            node_url
         }
     }
 }
@@ -65,7 +67,7 @@ impl State<DkgTypes> for Initializing {
             DkgMessage::DIDUrl(did_url) => {
                 self.did_urls.push(did_url.clone());
                 self.public_keys
-                    .push(resolve_document(did_url).unwrap().public_key().unwrap());
+                    .push(resolve_document(did_url, self.node_url.clone()).unwrap().public_key().unwrap());
                 DeliveryStatus::Delivered
             }
             m => DeliveryStatus::Unexpected(m),

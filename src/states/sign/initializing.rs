@@ -1,6 +1,7 @@
 use anyhow::Result;
+use colored::Colorize;
 
-use std::{fmt::Display, sync::mpsc::Sender, vec};
+use std::{fmt::Display, sync::mpsc::Sender, thread, vec};
 use thiserror::Error;
 
 use kyber_rs::{
@@ -17,9 +18,8 @@ use crate::states::{
 use super::{messages::SignMessage, SignTerminalStates, SignTypes, Signature};
 
 enum WaitingState {
-    NeverWaited,
     Waiting,
-    DoneWaiting,
+    Done,
 }
 
 pub struct Initializing {
@@ -63,7 +63,7 @@ impl Initializing {
             partial_signature,
             processed_partial_owners: vec![],
             bad_signers: vec![],
-            waiting: WaitingState::NeverWaited,
+            waiting: WaitingState::Waiting,
             sender,
             sleep_time,
         })
@@ -123,7 +123,7 @@ impl InitializingBuilder {
             processed_partial_owners: vec![partecipants[own_index].clone()],
             bad_signers: vec![],
             session_id: self.session_id.ok_or(MissingField::SessionId)?,
-            waiting: WaitingState::NeverWaited,
+            waiting: WaitingState::Waiting,
             sender: self.sender.ok_or(MissingField::Sender)?,
             sleep_time: self.sleep_time.ok_or(MissingField::SleepTime)?,
         })
@@ -188,12 +188,31 @@ impl TryFrom<DistKeyGenerator<SuiteEd25519>> for InitializingBuilder {
 
 impl Display for Initializing {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Initializing")
+        f.write_str("Initializing signature")
     }
 }
 
 impl State<SignTypes> for Initializing {
     fn initialize(&self) -> Vec<SignMessage> {
+        let sleep_time = self.sleep_time;
+                let session_id = self.session_id.clone();
+                let sender = self.sender.clone();
+
+                log::info!(target: &log_target(&self.session_id),
+                    "starting partial signatures countdown, {} seconds", sleep_time);
+                thread::spawn(move || {
+                    // sleeps to give time to the missing nodes
+                    
+                    std::thread::sleep(std::time::Duration::from_secs(sleep_time));
+                    // trigger advance messages in the case that no partial signature is received in the meantime
+                    sender
+                        .send(MessageWrapper {
+                            session_id,
+                            message: SignMessage::WaitingDone,
+                        })
+                        .unwrap();
+            });
+
         vec![SignMessage::PartialSignature(
             self.partial_signature.to_owned(),
         )]
@@ -220,7 +239,7 @@ impl State<SignTypes> for Initializing {
                 }
             },
             SignMessage::WaitingDone => {
-                self.waiting = WaitingState::DoneWaiting;
+                self.waiting = WaitingState::Done;
                 DeliveryStatus::Delivered
             }
         }
@@ -228,24 +247,19 @@ impl State<SignTypes> for Initializing {
 
     fn advance(&mut self) -> Result<Transition<SignTypes>, anyhow::Error> {
         match self.waiting {
-            WaitingState::NeverWaited => {
-                self.waiting = WaitingState::Waiting;
-
-                // sleeps to give time to the missing nodes
-                let sleep_seconds = self.sleep_time;
-                log::info!("waiting {} seconds for partial signatures", sleep_seconds,);
-                std::thread::sleep(std::time::Duration::from_secs(sleep_seconds));
-
-                // trigger advance messages in the case that no partial signature is received in the meantime
-                self.sender.send(MessageWrapper {
-                    session_id: self.session_id.clone(),
-                    message: SignMessage::WaitingDone,
-                })?;
-
-                Ok(Transition::Same)
+            WaitingState::Waiting => {
+                if self.processed_partial_owners.len() == self.dss.participants.len() {
+                    let signature = self.dss.signature()?;
+                    Ok(Transition::Terminal(SignTerminalStates::Completed(
+                        Signature(signature),
+                        self.processed_partial_owners.clone(),
+                        self.bad_signers.clone(),
+                    )))
+                } else {
+                    Ok(Transition::Same)
+                }
             }
-            WaitingState::Waiting => Ok(Transition::Same),
-            WaitingState::DoneWaiting => {
+            WaitingState::Done => {
                 if self.dss.enough_partial_sig() {
                     let signature = self.dss.signature()?;
                     Ok(Transition::Terminal(SignTerminalStates::Completed(
@@ -254,9 +268,15 @@ impl State<SignTypes> for Initializing {
                         self.bad_signers.clone(),
                     )))
                 } else {
+                    log::info!(target: &log_target(&self.session_id),
+                        "partial signatures timeout");
                     Ok(Transition::Terminal(SignTerminalStates::Failed))
                 }
             }
         }
     }
+}
+
+fn log_target(session_id: &str) -> String {
+    format!("fsm:{}:signature", session_id.chars().take(10).collect::<String>().yellow())
 }

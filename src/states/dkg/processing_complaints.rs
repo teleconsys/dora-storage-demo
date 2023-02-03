@@ -39,7 +39,7 @@ impl ProcessingComplaints {
 impl Display for ProcessingComplaints {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
-            "Processing complaints (own: {})",
+            "processing complaints (own: {})",
             self.complaints.len()
         ))
     }

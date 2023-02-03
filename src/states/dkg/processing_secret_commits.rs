@@ -1,4 +1,4 @@
-use crate::states::fsm::{DeliveryStatus, State, Transition};
+use crate::states::{fsm::{DeliveryStatus, State, Transition}, dkg::log_target};
 use anyhow::Error;
 use kyber_rs::{
     group::edwards25519::SuiteEd25519,
@@ -47,7 +47,7 @@ impl State<DkgTypes> for ProcessingSecretCommits {
     fn deliver(&mut self, message: DkgMessage) -> DeliveryStatus<DkgMessage> {
         match message {
             DkgMessage::SecretCommits { source, .. } if source == self.dkg.pubb => {
-                log::trace!("Skipping own message");
+                log::trace!(target: &log_target(), "skipping own message");
                 DeliveryStatus::Delivered
             }
             DkgMessage::SecretCommits {

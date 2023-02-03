@@ -6,7 +6,7 @@ use kyber_rs::{
     share::dkg::rabin::{DistKeyGenerator, Justification, Response},
 };
 
-use crate::states::fsm::{DeliveryStatus, State, Transition};
+use crate::states::{fsm::{DeliveryStatus, State, Transition}, dkg::log_target};
 
 use super::{processing_justifications::ProcessingJustifications, DkgMessage, DkgTypes};
 
@@ -35,7 +35,7 @@ impl ProcessingResponses {
 impl Display for ProcessingResponses {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
-            "Processing responses (own: {})",
+            "processing responses (own: {})",
             self.responses_for_other_nodes.len()
         ))
     }
@@ -55,7 +55,7 @@ impl State<DkgTypes> for ProcessingResponses {
     fn deliver(&mut self, message: DkgMessage) -> DeliveryStatus<DkgMessage> {
         match message {
             DkgMessage::Response { source, .. } if source == self.dkg.pubb => {
-                log::trace!("Skipping own response");
+                log::trace!(target: &log_target(), "skipping own response");
                 DeliveryStatus::Delivered
             }
             DkgMessage::Response { response, .. } => match self.dkg.process_response(&response) {

@@ -69,11 +69,20 @@ struct ApiSendArgs {
     #[arg(required = true, long, help = "action")]
     action: ApiAction,
 
-    #[arg(required = true, long, help = "message id")]
+    #[arg(long, help = "message id", default_value = "")]
     message_id: String,
 
-    #[arg(required = true, long, help = "index")]
+    #[arg(default_value = "", long, help = "input uri")]
+    input_uri: String,
+
+    #[arg(long, help = "storage id", default_value = None)]
+    storage_id: Option<String>,
+
+    #[arg(default_value = "dora-governor-test", long, help = "index")]
     index: String,
+
+    #[arg(long, help = "node DIDs")]
+    nodes: Option<String>,
 }
 
 #[derive(Clone)]
@@ -81,8 +90,10 @@ enum ApiAction {
     Store,
     Get,
     Delete,
+    Generic,
     GenericGet,
     GenericStore,
+    Connect,
 }
 
 impl FromStr for ApiAction {
@@ -91,8 +102,10 @@ impl FromStr for ApiAction {
             "store" => Ok(ApiAction::Store),
             "get" => Ok(ApiAction::Get),
             "delete" => Ok(ApiAction::Delete),
+            "generic" => Ok(ApiAction::Generic),
             "generic-get" => Ok(ApiAction::GenericGet),
             "generic-store" => Ok(ApiAction::GenericStore),
+            "connect" => Ok(ApiAction::Connect),
             _ => Err("not a valid action".to_owned()),
         }
     }
@@ -158,13 +171,14 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
         ApiAction::Store => {
             let message_id = args.message_id.clone();
             let request = NodeMessage::StoreRequest(api::routes::save::StoreRequest {
-                message_id: args.message_id,
+                input: InputUri::Iota(IotaMessageUri(args.message_id.clone())),
+                storage_uri: StorageUri::Dora(DoraLocalUri(args.message_id)),
             });
             serde_json::to_vec(&request)?
         }
         ApiAction::Get => {
             let request = NodeMessage::GetRequest(api::routes::get::GetRequest {
-                message_id: args.message_id,
+                input: InputUri::Iota(IotaMessageUri(args.message_id)),
             });
             serde_json::to_vec(&request)?
         }
@@ -194,22 +208,38 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
             };
             serde_json::to_vec(&request)?
         }
+        ApiAction::Generic => {
+            let mut storage_id = StorageUri::None;
+            if let Some(id) = args.storage_id {
+                storage_id = StorageUri::Dora(DoraLocalUri(id));
+            }
+            let request = GenericRequest {
+                input: InputUri::from_str(&args.input_uri).unwrap(),
+                output: OutputUri::None,
+                execution: Execution::None,
+                signature: false,
+                store: storage_id,
+            };
+            serde_json::to_vec(&request)?
+        }
+        ApiAction::Connect => {
+            let nodes = match args.nodes {
+                Some(n) => n,
+                None => return Err(anyhow::Error::msg("Missing node dids")),
+            };
+
+            let nodes = nodes
+                .split(',')
+                .map(|d| format!("\"did:iota:{}\"", d))
+                .collect::<Vec<String>>()
+                .join(",");
+
+            format!("{{\"nodes\": [{}]}}", nodes).as_bytes().to_owned()
+        }
     };
-    let publisher = Publisher::new(Network::Mainnet)?;
+    let publisher = Publisher::new(Network::Mainnet, None)?;
     let rt = tokio::runtime::Runtime::new()?;
     let result = rt.block_on(publisher.publish(&request, Some(args.index)))?;
     println!("{}", result);
-    Ok(())
-}
-
-#[test]
-fn test_serde() -> Result<()> {
-    let message = NodeMessage::StoreRequest(api::routes::save::StoreRequest {
-        message_id: "asfd".to_owned(),
-    });
-
-    let encoded = serde_json::to_vec(&message)?;
-    let decoded: NodeMessage = serde_json::from_slice(&encoded)?;
-    assert_eq!(message.to_string(), decoded.to_string());
     Ok(())
 }
