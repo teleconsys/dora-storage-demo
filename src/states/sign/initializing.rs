@@ -1,4 +1,5 @@
 use anyhow::Result;
+use colored::Colorize;
 
 use std::{fmt::Display, sync::mpsc::Sender, thread, vec};
 use thiserror::Error;
@@ -277,5 +278,5 @@ impl State<SignTypes> for Initializing {
 }
 
 fn log_target(session_id: &str) -> String {
-    format!("fsm:{}:signature", session_id.chars().take(10).collect::<String>())
+    format!("fsm:{}:signature", session_id.chars().take(10).collect::<String>().yellow())
 }

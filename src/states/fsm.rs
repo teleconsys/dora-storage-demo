@@ -46,7 +46,7 @@ pub struct StateMachine<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::
 
 impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMachine<'a, T, R> {
     fn log_target(&self) -> String {
-        format!("fsm:{}", self.session_id.chars().take(10).collect::<String>())
+        format!("fsm:{}", self.session_id.chars().take(10).collect::<String>().yellow())
     }
     pub fn new<F: Into<Feed<T::Message, R>>>(
         initial_state: BoxedState<T>,
