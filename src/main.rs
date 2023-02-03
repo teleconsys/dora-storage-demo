@@ -134,7 +134,7 @@ fn main() -> Result<()> {
         Action::Api(args) => run_api(args)?,
         Action::IotaNode(args) => run_iota::run_node(args)?,
         Action::ApiSend(args) => api_send(args)?,
-        Action::Verify(args) => (),
+        Action::Verify(args) => verify(args)?,
     }
 
     Ok(())
