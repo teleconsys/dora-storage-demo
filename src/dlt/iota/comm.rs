@@ -61,7 +61,7 @@ impl Listener {
                     tx.lock()
                         .unwrap()
                         .send((Vec::from(payload.data()), message.id().0))
-                        .unwrap_or(log::error!("could not propagate message from listener {}", index));
+                        .unwrap()
                 }
             })
             .await?;
