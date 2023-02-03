@@ -90,8 +90,8 @@ struct ApiSendArgs {
     #[arg(long, help = "storage id", default_value = None)]
     storage_id: Option<String>,
 
-    #[arg(long = "governor-index", default_value = "dora-governor-test", long, help = "index")]
-    governor_index: String,
+    #[arg(long = "committee-index", default_value = "dora-governor-test", long, help = "index")]
+    committee_index: String,
 
     #[arg(long, help = "node DIDs")]
     nodes: Option<String>,
