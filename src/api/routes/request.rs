@@ -7,6 +7,8 @@ use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
 
+use crate::demo::node::ApiNodeError;
+
 use super::{
     get::{GetRequest, GetResponse},
     save::StoreRequest,
@@ -15,7 +17,7 @@ use super::{
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct DoraLocalUri(pub String);
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct IotaIndexUri(String);
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 
@@ -264,7 +266,7 @@ impl FromStr for InputUri {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub enum OutputUri {
     None,
     Iota(IotaIndexUri),
@@ -300,13 +302,13 @@ impl Default for Execution {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct RequestId(pub String);
 
 #[derive(Serialize, Deserialize)]
 pub struct Signature(pub Vec<u8>);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum ResponseState {
     Success,
     Failure,
@@ -382,18 +384,26 @@ fn test_generic_store_request() {
     ))
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct GenericResponse {
     pub(crate) request_id: RequestId,
     pub(crate) result: ResponseState,
     pub(crate) output_location: Option<OutputUri>,
     pub(crate) data: Option<String>,
-    pub(crate) signature: Signature,
+    pub(crate) signature_hex: Option<String>,
 }
 
 #[derive(Error, Debug, EnumDisplay)]
 pub enum GenericResponseParseError {
     NotAValidResponse,
+}
+
+impl FromStr for GenericResponse {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::de::from_str(s)
+    }
 }
 
 // TODO: Finish implementing
@@ -405,7 +415,7 @@ impl TryFrom<NodeMessage> for GenericResponse {
             NodeMessage::StoreResponse(r) => Ok(Self {
                 request_id: RequestId("".to_owned()),
                 result: ResponseState::Success,
-                signature: Signature(vec![]),
+                signature_hex: None,
                 output_location: None,
                 data: None,
             }),
@@ -413,14 +423,14 @@ impl TryFrom<NodeMessage> for GenericResponse {
                 GetResponse::Success { data, signature } => Ok(Self {
                     request_id: RequestId("".to_owned()),
                     result: ResponseState::Success,
-                    signature: Signature(signature),
+                    signature_hex: None,
                     output_location: None,
                     data: None,
                 }),
                 GetResponse::Failure(f) => Ok(Self {
                     request_id: RequestId("".to_owned()),
                     result: ResponseState::Failure,
-                    signature: Signature(vec![]),
+                    signature_hex: None,
                     output_location: None,
                     data: None,
                 }),
@@ -428,7 +438,7 @@ impl TryFrom<NodeMessage> for GenericResponse {
             NodeMessage::DeleteResponse(r) => Ok(Self {
                 request_id: RequestId("".to_owned()),
                 result: ResponseState::Success,
-                signature: Signature(Default::default()),
+                signature_hex: None,
                 output_location: None,
                 data: None,
             }),

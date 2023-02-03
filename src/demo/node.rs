@@ -453,7 +453,7 @@ impl ApiNode {
                     let mut resp = GenericResponse {
                         request_id: request::RequestId(session_id.to_owned()),
                         result: request::ResponseState::Success,
-                        signature: request::Signature(vec![]),
+                        signature_hex: None,
                         output_location: None,
                         data: None,
                     };
@@ -471,7 +471,7 @@ impl ApiNode {
                     let (signature, working_nodes) =
                         manage_signature_terminal_state(final_state, session_id, did_urls, logger, node_url)
                             .map_err(ApiNodeError::SignatureError)?;
-                    resp.signature = request::Signature(signature.0);
+                    resp.signature_hex = Some(hex::encode(signature.0));
 
                     Ok((resp, working_nodes))
                 }
@@ -479,7 +479,7 @@ impl ApiNode {
                     let mut resp = GenericResponse {
                         request_id: request::RequestId(session_id.to_owned()),
                         result: request::ResponseState::Failure,
-                        signature: request::Signature(vec![]),
+                        signature_hex: None,
                         output_location: None,
                         data: None,
                     };
@@ -497,7 +497,7 @@ impl ApiNode {
                     let (signature, working_nodes) =
                         manage_signature_terminal_state(final_state, session_id, did_urls, logger, node_url)
                             .map_err(ApiNodeError::SignatureError)?;
-                    resp.signature = request::Signature(signature.0);
+                    resp.signature_hex = Some(hex::encode(signature.0));
 
                     Ok((resp, working_nodes))
                 }
@@ -525,7 +525,7 @@ impl ApiNode {
                 let mut resp = GenericResponse {
                     request_id: request::RequestId(session_id.to_owned()),
                     result: request::ResponseState::Failure,
-                    signature: request::Signature(vec![]),
+                    signature_hex: None,
                     output_location: None,
                     data: None,
                 };
@@ -543,7 +543,7 @@ impl ApiNode {
                 let (signature, working_nodes) =
                     manage_signature_terminal_state(final_state, session_id, did_urls, logger, node_url)
                         .map_err(ApiNodeError::SignatureError)?;
-                resp.signature = request::Signature(signature.0);
+                resp.signature_hex = Some(hex::encode(signature.0));
 
                 return Ok((resp, working_nodes));
             }
@@ -557,7 +557,7 @@ impl ApiNode {
         let mut resp = GenericResponse {
             request_id: request::RequestId(session_id.to_owned()),
             result: request::ResponseState::Success,
-            signature: request::Signature(vec![]),
+            signature_hex: None,
             output_location: None,
             data: Some(data_utf8),
         };
@@ -575,7 +575,7 @@ impl ApiNode {
         let (signature, working_nodes) =
             manage_signature_terminal_state(final_state, session_id, did_urls, logger, node_url)
                 .map_err(ApiNodeError::SignatureError)?;
-        resp.signature = request::Signature(signature.0);
+        resp.signature_hex = Some(hex::encode(signature.0));
 
         Ok((resp, working_nodes))
     }

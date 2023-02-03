@@ -17,9 +17,9 @@ use std::{
 };
 
 use actix_web::{App, HttpServer};
-use anyhow::Result;
+use anyhow::{Result, bail};
 
-use api::routes::AppData;
+use api::routes::{AppData, request::GenericResponse};
 
 use clap::Parser;
 use demo::{
@@ -27,8 +27,10 @@ use demo::{
     run_iota::{self, IotaNodeArgs},
 };
 
-use dlt::iota::{client::iota_client, Publisher};
-use identity_iota::iota_core::Network;
+use did::resolve_document;
+use dlt::iota::{client::iota_client, Publisher, resolve_did};
+use identity_iota::{iota_core::{Network, IotaDID}, core::ToJson};
+use kyber_rs::sign::eddsa;
 use net::host::Host;
 use s3::request;
 use states::dkg;
@@ -62,6 +64,16 @@ enum Action {
     Api(ApiArgs),
     IotaNode(IotaNodeArgs),
     ApiSend(ApiSendArgs),
+    Verify(VerifyArgs),
+}
+
+#[derive(Parser)]
+struct VerifyArgs {
+    #[arg(required = true, long = "committee-did-url", help = "did url of the committee")]
+    committee_did_url: String,
+
+    #[arg(required = true, long = "dora-response", help = "response from a dora committee")]
+    dora_response: GenericResponse,   
 }
 
 #[derive(Parser)]
@@ -78,8 +90,8 @@ struct ApiSendArgs {
     #[arg(long, help = "storage id", default_value = None)]
     storage_id: Option<String>,
 
-    #[arg(default_value = "dora-governor-test", long, help = "index")]
-    index: String,
+    #[arg(long = "governor-index", default_value = "dora-governor-test", long, help = "index")]
+    governor_index: String,
 
     #[arg(long, help = "node DIDs")]
     nodes: Option<String>,
@@ -122,6 +134,7 @@ fn main() -> Result<()> {
         Action::Api(args) => run_api(args)?,
         Action::IotaNode(args) => run_iota::run_node(args)?,
         Action::ApiSend(args) => api_send(args)?,
+        Action::Verify(args) => (),
     }
 
     Ok(())
@@ -239,7 +252,21 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
     };
     let publisher = Publisher::new(Network::Mainnet, None)?;
     let rt = tokio::runtime::Runtime::new()?;
-    let result = rt.block_on(publisher.publish(&request, Some(args.index)))?;
+    let result = rt.block_on(publisher.publish(&request, Some(args.governor_index)))?;
     println!("{}", result);
+    Ok(())
+}
+
+fn verify(args: VerifyArgs) -> Result<()> {
+    let public_key = resolve_document(args.committee_did_url, None)?.public_key()?;
+
+    let mut response = args.dora_response;
+    if let Some(signature_hex) = response.signature_hex.clone() {
+        response.signature_hex = None;    
+        eddsa::verify(&public_key, &response.to_jcs()?, &hex::decode(signature_hex)?)?;
+    } else {
+        bail!("Missing signature")
+    }
+
     Ok(())
 }
