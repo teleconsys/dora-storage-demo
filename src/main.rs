@@ -72,14 +72,17 @@ struct ApiSendArgs {
     #[arg(long, help = "message id", default_value = "")]
     message_id: String,
 
-    #[arg(required = true, long, help = "input uri")]
+    #[arg(default_value = "", long, help = "input uri")]
     input_uri: String,
 
     #[arg(long, help = "storage id", default_value = None)]
     storage_id: Option<String>,
 
-    #[arg(required = true, long, help = "index")]
+    #[arg(default_value = "dora-governor-test", long, help = "index")]
     index: String,
+
+    #[arg(long, help = "node DIDs")]
+    nodes: Option<String>,
 }
 
 #[derive(Clone)]
@@ -90,6 +93,7 @@ enum ApiAction {
     Generic,
     GenericGet,
     GenericStore,
+    Connect,
 }
 
 impl FromStr for ApiAction {
@@ -101,6 +105,7 @@ impl FromStr for ApiAction {
             "generic" => Ok(ApiAction::Generic),
             "generic-get" => Ok(ApiAction::GenericGet),
             "generic-store" => Ok(ApiAction::GenericStore),
+            "connect" => Ok(ApiAction::Connect),
             _ => Err("not a valid action".to_owned()),
         }
     }
@@ -216,6 +221,20 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
                 store: storage_id,
             };
             serde_json::to_vec(&request)?
+        }
+        ApiAction::Connect => {
+            let nodes = match args.nodes {
+                Some(n) => n,
+                None => return Err(anyhow::Error::msg("Missing node dids")),
+            };
+
+            let nodes = nodes
+                .split(',')
+                .map(|d| format!("\"did:iota:{}\"", d))
+                .collect::<Vec<String>>()
+                .join(",");
+
+            format!("{{\"nodes\": [{}]}}", nodes).as_bytes().to_owned()
         }
     };
     let publisher = Publisher::new(Network::Mainnet, None)?;
