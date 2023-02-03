@@ -69,10 +69,10 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
             args.storage_secret_key,
             args.storage_endpoint,
         )?);
-        log::trace!("Storage is set");
+        log::trace!("storage is set");
 
         storage.clone().unwrap().health_check()?;
-        log::trace!("Storage is healthy");
+        log::trace!("storage is healthy");
     }
 
     let suite = SuiteEd25519::new_blake3_sha256_ed25519();
