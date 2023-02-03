@@ -264,6 +264,7 @@ fn verify(args: VerifyArgs) -> Result<()> {
     if let Some(signature_hex) = response.signature_hex.clone() {
         response.signature_hex = None;    
         eddsa::verify(&public_key, &response.to_jcs()?, &hex::decode(signature_hex)?)?;
+        println!("Signature is valid")
     } else {
         bail!("Missing signature")
     }
