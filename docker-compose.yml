@@ -48,7 +48,7 @@ services:
     stop_grace_period: 5m
     restart: always
     environment:
-      - RUST_LOG=fsm=trace,dora=trace
+      - RUST_LOG=fsm=trace,dora=trace,sign=trace
     depends_on:
       minio-1:
         condition: service_started
@@ -72,7 +72,7 @@ services:
     stop_grace_period: 5m
     restart: always
     environment:
-      - RUST_LOG=fsm=trace,dora=trace
+      - RUST_LOG=fsm=trace,dora=trace,sign=trace
     depends_on:
       minio-2:
         condition: service_started
@@ -96,7 +96,7 @@ services:
     stop_grace_period: 5m
     restart: always
     environment:
-      - RUST_LOG=fsm=trace,dora=trace
+      - RUST_LOG=fsm=trace,dora=trace,sign=trace
     depends_on:
       minio-3:
         condition: service_started
@@ -118,4 +118,5 @@ services:
 volumes:
   minio_storage_1: {} 
   minio_storage_2: {}
-  minio_storage_3: {}  
+  minio_storage_3: {}
+
