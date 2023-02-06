@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Display};
 use std::io::Read;
 use std::str::{FromStr, Utf8Error};
 use std::sync::mpsc::{Receiver, Sender};
@@ -5,7 +6,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use crate::api::routes::delete::{DeleteRequest, DeleteResponse};
 use crate::api::routes::get::{GetError, GetRequest, GetResponse};
 use crate::api::routes::request::{
-    self, DoraLocalUri, GenericResponse, InputUri, IotaMessageUri, StorageUri,
+    self, CommitteeLog, InputUri, IotaMessageUri, StorageLocalUri, StorageUri,
 };
 use crate::api::routes::save::{StoreError, StoreRequest, StoreResponse};
 use crate::api::routes::{GenericRequest, NodeMessage};
@@ -188,6 +189,8 @@ impl Node {
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
+
+        log::info!("starting DKG...");
         let dkg_id = "dkg";
         let dkg_initial_state = InitializingIota::new(
             self.keypair.clone(),
@@ -207,6 +210,7 @@ impl Node {
         let dkg_terminal_state = dkg_fsm.run()?;
         let DkgTerminalStates::Completed { dkg, did_urls } = dkg_terminal_state;
         let dist_pub_key = dkg.dist_key_share()?.public();
+        log::info!("DKG done");
 
         // Create unsigned DID
         let document = new_document(
@@ -216,6 +220,8 @@ impl Node {
             Some(did_urls.clone()),
         )?;
 
+        log::info!("committee's DID document created");
+        log::info!("signing committee's DID document...");
         let sign_initial_state = sign::InitializingBuilder::try_from(dkg.clone())?
             .with_message(document.to_bytes()?)
             .with_secret(secret)
@@ -248,6 +254,7 @@ impl Node {
         if let SignTerminalStates::Completed(signature, processed_partial_owners, bad_signers) =
             sign_terminal_state
         {
+            log::info!("committee's DID has been signed");
             // Publish DKG signature log
             let (mut dkg_log, mut working_nodes) = new_signature_log(
                 "dkg".to_string(),
@@ -261,6 +268,7 @@ impl Node {
             // Publish signed DID if the node is the first on the list
             working_nodes.sort();
             if own_did_url == working_nodes[0] {
+                log::info!("publishing committee's DID...");
                 document.publish(&signature.to_vec(), node_url.clone())?;
                 log::info!("committee's DID has been published, DID URL: {}", did_url);
                 //let resolved_did = resolve_document(did_url.clone())?;
@@ -348,7 +356,9 @@ impl Node {
                     continue;
                 }
             };
-            log::info!("received committee request, id: {}", req_id);
+            let session_id: String = hex::encode(req_id).chars().take(10).collect();
+            log::info!("received a request for the committee (msg_id: {})", req_id);
+            log::info!("handling request [{}]", session_id);
             let response = match api_node
                 .handle_message(
                     request,
@@ -360,23 +370,32 @@ impl Node {
                     did_urls.clone(),
                     node_url.clone(),
                 )
-                .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))
+                .map_err(|e| anyhow::Error::msg(format!("{e:?}")))
             {
                 Ok(r) => r,
                 Err(e) => {
-                    log::error!("could not handle request: {}", e);
+                    log::error!("could not handle request [{}]: {}", session_id, e);
                     continue;
                 }
             };
             if let Some((r, working_nodes)) = response {
+                log::info!("request [{}] done", session_id);
                 let encoded = serde_json::to_vec(&r)?;
                 let mut wn = working_nodes.clone();
                 // Publish signed DID if the node is the first on the list
                 wn.sort();
                 if own_did_url == wn[0] {
                     match rt.block_on(api_output.publish(&encoded, Some(api_index.to_owned()))) {
-                        Ok(i) => log::info!("published response on: {}", i),
-                        Err(e) => log::error!("could not publish response: {}", e),
+                        Ok(i) => log::info!(
+                            "committee's task log for request [{}] published (msg_id: {})",
+                            session_id,
+                            i
+                        ),
+                        Err(e) => log::error!(
+                            "could not publish committee's task log for request [{}]: {}",
+                            session_id,
+                            e
+                        ),
                     };
                 }
             }
@@ -420,7 +439,7 @@ impl ApiNode {
         committee_did_url: String,
         did_urls: Vec<String>,
         node_url: Option<String>,
-    ) -> Result<Option<(GenericResponse, Vec<String>)>, ApiNodeError> {
+    ) -> Result<Option<(CommitteeLog, Vec<String>)>, ApiNodeError> {
         match message {
             NodeMessage::StoreRequest(r) => Ok(Some(self.handle_store_request(
                 r,
@@ -463,18 +482,18 @@ impl ApiNode {
         sign_input: &Receiver<MessageWrapper<SignMessage>>,
         sign_output: &Sender<MessageWrapper<SignMessage>>,
         node_url: Option<String>,
-        committee_did_url: String,
-    ) -> Result<(GenericResponse, Vec<String>), ApiNodeError> {
+        committee_did: String,
+    ) -> Result<(CommitteeLog, Vec<String>), ApiNodeError> {
         let data = self.get_data(&request.input)?;
-        if let StorageUri::Dora(DoraLocalUri(item_name)) = request.storage_uri {
+        if let StorageUri::Storage(StorageLocalUri(item_name)) = request.storage_uri {
             match self.storage.put(item_name, &data) {
                 Ok(()) => {
-                    let mut resp = GenericResponse {
-                        committee_did_url,
+                    let mut resp = CommitteeLog {
+                        committee_did,
                         request_id: request::RequestId(session_id.to_owned()),
                         result: request::ResponseState::Success,
                         signature_hex: None,
-                        output_location: None,
+                        output_uri: None,
                         data: None,
                     };
                     let temp_resp_bytes = resp.to_jcs().unwrap();
@@ -501,12 +520,12 @@ impl ApiNode {
                     Ok((resp, working_nodes))
                 }
                 Err(_) => {
-                    let mut resp = GenericResponse {
-                        committee_did_url,
+                    let mut resp = CommitteeLog {
+                        committee_did,
                         request_id: request::RequestId(session_id.to_owned()),
                         result: request::ResponseState::Failure,
                         signature_hex: None,
-                        output_location: None,
+                        output_uri: None,
                         data: None,
                     };
                     let temp_resp_bytes = resp.to_jcs().unwrap();
@@ -549,17 +568,17 @@ impl ApiNode {
         logger: NodeSignatureLogger,
         did_urls: Vec<String>,
         node_url: Option<String>,
-        committee_did_url: String,
-    ) -> Result<(GenericResponse, Vec<String>), ApiNodeError> {
+        committee_did: String,
+    ) -> Result<(CommitteeLog, Vec<String>), ApiNodeError> {
         let data = match self.get_data(&request.input) {
             Ok(d) => d,
             Err(e) => {
-                let mut resp = GenericResponse {
-                    committee_did_url,
+                let mut resp = CommitteeLog {
+                    committee_did,
                     request_id: request::RequestId(session_id.to_owned()),
                     result: request::ResponseState::Failure,
                     signature_hex: None,
-                    output_location: None,
+                    output_uri: None,
                     data: None,
                 };
                 let temp_resp_bytes = resp.to_jcs().unwrap();
@@ -592,12 +611,12 @@ impl ApiNode {
             Err(e) => return Err(ApiNodeError::ConversionError(e)),
         };
 
-        let mut resp = GenericResponse {
-            committee_did_url,
+        let mut resp = CommitteeLog {
+            committee_did,
             request_id: request::RequestId(session_id.to_owned()),
             result: request::ResponseState::Success,
             signature_hex: None,
-            output_location: None,
+            output_uri: None,
             data: Some(data_utf8),
         };
         let temp_resp_bytes = resp.to_jcs().unwrap();
@@ -624,7 +643,7 @@ impl ApiNode {
         request: DeleteRequest,
         logger: NodeSignatureLogger,
         did_urls: Vec<String>,
-    ) -> Result<(GenericResponse, Vec<String>), ApiNodeError> {
+    ) -> Result<(CommitteeLog, Vec<String>), ApiNodeError> {
         match self.storage.delete(request.message_id) {
             Ok(()) => (),
             Err(e) => return Err(ApiNodeError::StorageError(e)),
@@ -656,7 +675,7 @@ impl ApiNode {
                 }
             },
             InputUri::Local(uri) => match uri {
-                DoraLocalUri(index) => self
+                StorageLocalUri(index) => self
                     .storage
                     .get(index.to_owned())
                     .map_err(ApiNodeError::StorageError)?,
@@ -773,7 +792,7 @@ impl NodeSignatureLogger {
         let msg_id = tokio::runtime::Runtime::new()?
             .block_on(publisher.publish(&log.to_jcs()?, Some(self.committee_index.clone())))?;
         log::info!(target: &signature_log_target(&log.session_id),
-            "log published (msg_id: {})", msg_id);
+            "node's signature log published (msg_id: {})", msg_id);
         Ok(())
     }
 
@@ -788,7 +807,7 @@ impl NodeSignatureLogger {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NodeSignatureLog {
     pub(crate) session_id: String,
-    pub(crate) sender: String,
+    pub(crate) sender_did: String,
     pub(crate) absent_nodes: Vec<String>,
     pub(crate) bad_signers: Vec<String>,
     pub(crate) signature_hex: Option<String>,
@@ -830,7 +849,7 @@ pub fn new_signature_log(
     Ok((
         NodeSignatureLog {
             session_id,
-            sender: "".to_string(),
+            sender_did: "".to_string(),
             absent_nodes,
             bad_signers: bad_signers_nodes,
             signature_hex: None,
@@ -849,7 +868,7 @@ impl FromStr for NodeSignatureLog {
 
 impl NodeSignatureLog {
     fn add_sender(&mut self, sender: &str) {
-        self.sender = sender.to_string();
+        self.sender_did = sender.to_string();
     }
 
     fn add_signature(&mut self, signature: &[u8]) {

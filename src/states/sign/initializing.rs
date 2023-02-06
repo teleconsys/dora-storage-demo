@@ -198,7 +198,7 @@ impl State<SignTypes> for Initializing {
         let session_id = self.session_id.clone();
         let sender = self.sender.clone();
 
-        log::info!(target: &log_target(&self.session_id),
+        log::trace!(target: &log_target(&self.session_id),
                     "starting partial signatures countdown, {} seconds", sleep_time);
         thread::spawn(move || {
             // sleeps to give time to the missing nodes

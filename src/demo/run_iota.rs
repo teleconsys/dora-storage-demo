@@ -208,7 +208,10 @@ fn listen_governor_instructions(
         _ => panic!("unsupported network"),
     };
     let mut init_listener = Listener::new(net, node_url)?;
-    log::info!("listening on governor index: {}", governor_index);
+    log::info!(
+        "listening for instructions on governor index: {}",
+        governor_index
+    );
     let receiver = tokio::runtime::Runtime::new()?.block_on(init_listener.start(governor_index))?;
     loop {
         if let Some(data) = receiver.iter().next() {

@@ -19,7 +19,7 @@ use std::{
 use actix_web::{App, HttpServer};
 use anyhow::{bail, Result};
 
-use api::routes::{request::GenericResponse, AppData};
+use api::routes::{request::CommitteeLog, AppData};
 
 use clap::Parser;
 use demo::{
@@ -41,7 +41,7 @@ use states::dkg;
 
 use crate::api::routes::{
     request::{
-        DoraLocalUri, Execution, InputUri, IotaIndexUri, IotaMessageUri, OutputUri, StorageUri,
+        Execution, InputUri, IotaIndexUri, IotaMessageUri, OutputUri, StorageLocalUri, StorageUri,
     },
     GenericRequest, NodeMessage,
 };
@@ -80,12 +80,8 @@ struct VerifyLogArgs {
 
 #[derive(Parser)]
 struct VerifyArgs {
-    #[arg(
-        required = true,
-        long = "dora-response",
-        help = "response from a dora committee"
-    )]
-    dora_response: GenericResponse,
+    #[arg(required = true, long = "committee-log", help = "dora committee log")]
+    committee_log: CommitteeLog,
 }
 
 #[derive(Parser)]
@@ -203,7 +199,7 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
             let message_id = args.message_id.clone();
             let request = NodeMessage::StoreRequest(api::routes::save::StoreRequest {
                 input: InputUri::Iota(IotaMessageUri(args.message_id.clone())),
-                storage_uri: StorageUri::Dora(DoraLocalUri(args.message_id)),
+                storage_uri: StorageUri::Storage(StorageLocalUri(args.message_id)),
             });
             serde_json::to_vec(&request)?
         }
@@ -221,35 +217,35 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
         }
         ApiAction::GenericGet => {
             let request = GenericRequest {
-                input: InputUri::Local(DoraLocalUri(args.message_id)),
-                output: OutputUri::None,
+                input_uri: InputUri::Local(StorageLocalUri(args.message_id)),
+                output_uri: OutputUri::None,
                 execution: Execution::None,
                 signature: false,
-                store: StorageUri::None,
+                storage_uri: StorageUri::None,
             };
             serde_json::to_vec(&request)?
         }
         ApiAction::GenericStore => {
             let request = GenericRequest {
-                input: InputUri::Iota(IotaMessageUri(args.message_id.clone())),
-                output: OutputUri::None,
+                input_uri: InputUri::Iota(IotaMessageUri(args.message_id.clone())),
+                output_uri: OutputUri::None,
                 execution: Execution::None,
                 signature: false,
-                store: StorageUri::Dora(DoraLocalUri(args.message_id)),
+                storage_uri: StorageUri::Storage(StorageLocalUri(args.message_id)),
             };
             serde_json::to_vec(&request)?
         }
         ApiAction::Generic => {
             let mut storage_id = StorageUri::None;
             if let Some(id) = args.storage_id {
-                storage_id = StorageUri::Dora(DoraLocalUri(id));
+                storage_id = StorageUri::Storage(StorageLocalUri(id));
             }
             let request = GenericRequest {
-                input: InputUri::from_str(&args.input_uri).unwrap(),
-                output: OutputUri::None,
+                input_uri: InputUri::from_str(&args.input_uri).unwrap(),
+                output_uri: OutputUri::None,
                 execution: Execution::None,
                 signature: false,
-                store: storage_id,
+                storage_uri: storage_id,
             };
             serde_json::to_vec(&request)?
         }
@@ -276,10 +272,13 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
 }
 
 fn verify(args: VerifyArgs) -> Result<()> {
-    let mut response = args.dora_response;
-    let committee_did_url = response.committee_did_url.clone();
+    let mut response = args.committee_log;
+    let committee_did_url = response.committee_did.clone();
 
+    println!("Retreivieng committee's public key from DID document");
     let public_key = resolve_document(committee_did_url, None)?.public_key()?;
+    println!("Public key retrieved");
+    println!("Performing signature validation");
 
     if let Some(signature_hex) = response.signature_hex.clone() {
         response.signature_hex = None;
@@ -299,9 +298,12 @@ fn verify(args: VerifyArgs) -> Result<()> {
 
 fn verify_log(args: VerifyLogArgs) -> Result<()> {
     let mut log = args.log;
-    let did_url = log.sender.clone();
+    let did_url = log.sender_did.clone();
 
+    println!("Retrievieng node's public key from DID document");
     let public_key = resolve_document(did_url, None)?.public_key()?;
+    println!("Public key retrieved");
+    println!("Performing signature validation");
 
     if let Some(signature_hex) = log.signature_hex.clone() {
         log.signature_hex = None;
