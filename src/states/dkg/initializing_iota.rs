@@ -33,7 +33,7 @@ impl InitializingIota {
         own_did_url: String,
         peers_did_urls: Vec<String>,
         num_participants: usize,
-        node_url: Option<String>
+        node_url: Option<String>,
     ) -> Result<InitializingIota> {
         let mut public_keys = Vec::with_capacity(num_participants);
         public_keys.push(key.public.clone());
@@ -80,4 +80,3 @@ impl State<DkgTypes> for InitializingIota {
         }
     }
 }
-

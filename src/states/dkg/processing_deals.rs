@@ -5,7 +5,10 @@ use kyber_rs::{
 };
 use std::{collections::HashMap, fmt::Display};
 
-use crate::states::{fsm::{DeliveryStatus, State, Transition}, dkg::log_target};
+use crate::states::{
+    dkg::log_target,
+    fsm::{DeliveryStatus, State, Transition},
+};
 
 use super::{processing_responses::ProcessingResponses, DkgMessage, DkgTypes};
 
@@ -60,8 +63,7 @@ impl State<DkgTypes> for ProcessingDeals {
                 }
             }
             DkgMessage::Deal { .. } => {
-                log::trace!(target: &log_target(),
-                    "skipping deal meant for other node");
+                log::trace!(target: &log_target(), "skipping deal meant for other node");
                 DeliveryStatus::Delivered
             }
             m => DeliveryStatus::Unexpected(m),

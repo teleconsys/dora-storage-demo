@@ -15,7 +15,10 @@ pub(crate) fn iota_client(network_name: &str, node_url: Option<String>) -> Resul
     Ok(r.block_on(client_builder.finish())?)
 }
 
-pub(crate) fn identity_client(network_name: &str, node_url: Option<String>) -> Result<IdentityClient> {
+pub(crate) fn identity_client(
+    network_name: &str,
+    node_url: Option<String>,
+) -> Result<IdentityClient> {
     let client_builder = ClientBuilder::new()
         .network(Network::try_from_name(network_name.to_owned())?)
         .encoding(DIDMessageEncoding::Json)
@@ -27,7 +30,7 @@ pub(crate) fn identity_client(network_name: &str, node_url: Option<String>) -> R
 
 fn get_network_node(network: &str, node_url: Option<String>) -> String {
     if let Some(url) = node_url {
-        return url
+        return url;
     }
     match network {
         "main" => "https://chrysalis-nodes.iota.cafe".to_string(),

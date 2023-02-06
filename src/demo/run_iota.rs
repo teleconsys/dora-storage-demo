@@ -88,8 +88,12 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
 
     let is_completed = Arc::new(AtomicBool::new(false));
 
-    let mut all_dids =
-        listen_governor_instructions(args.governor, did_url.clone(), network.clone(), args.node_url.clone())?;
+    let mut all_dids = listen_governor_instructions(
+        args.governor,
+        did_url.clone(),
+        network.clone(),
+        args.node_url.clone(),
+    )?;
 
     // get only peers dids
     let mut peers_dids = all_dids.clone();
@@ -112,13 +116,13 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
         is_completed.clone(),
         peers_indexes.clone(),
         args.did_network.clone(),
-        args.node_url.clone()
+        args.node_url.clone(),
     );
     let mut dkg_broadcast_relay = IotaBroadcastRelay::new(
         own_idx.clone(),
         dkg_output_channel_receiver,
         args.did_network.clone(),
-        args.node_url.clone()
+        args.node_url.clone(),
     )?;
 
     let dkg_listen_relay_handle = thread::spawn(move || dkg_listen_relay.listen());
@@ -132,13 +136,13 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
         is_completed.clone(),
         peers_indexes,
         args.did_network.clone(),
-        args.node_url.clone()
+        args.node_url.clone(),
     );
     let mut sign_broadcast_relay = IotaBroadcastRelay::new(
         own_idx,
         sign_input_channel_receiver,
         args.did_network.clone(),
-        args.node_url.clone()
+        args.node_url.clone(),
     )?;
 
     let sign_listen_relay_handle = thread::spawn(move || sign_listen_relay.listen());
@@ -171,7 +175,7 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
         args.time_resolution,
         sign_input_channel_sender,
         args.signature_sleep_time,
-        args.node_url
+        args.node_url,
     )?;
 
     is_completed.store(true, Ordering::SeqCst);
@@ -196,7 +200,7 @@ fn listen_governor_instructions(
     governor_index: String,
     own_did: String,
     network: String,
-    node_url: Option<String>
+    node_url: Option<String>,
 ) -> Result<Vec<String>> {
     let net = match network.as_str() {
         "iota-main" => Network::Mainnet,
@@ -212,7 +216,10 @@ fn listen_governor_instructions(
             if let Ok(message) = DkgInit::deserialize(&mut deserializer) {
                 for node in message.nodes.iter() {
                     if own_did == *node {
-                        log::info!("requested DKG from governor, committe's nodes: {:?}", message.nodes);
+                        log::info!(
+                            "requested DKG from governor, committe's nodes: {:?}",
+                            message.nodes
+                        );
                         return Ok(message.nodes);
                     }
                 }

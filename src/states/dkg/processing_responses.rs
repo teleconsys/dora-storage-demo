@@ -6,7 +6,10 @@ use kyber_rs::{
     share::dkg::rabin::{DistKeyGenerator, Justification, Response},
 };
 
-use crate::states::{fsm::{DeliveryStatus, State, Transition}, dkg::log_target};
+use crate::states::{
+    dkg::log_target,
+    fsm::{DeliveryStatus, State, Transition},
+};
 
 use super::{processing_justifications::ProcessingJustifications, DkgMessage, DkgTypes};
 

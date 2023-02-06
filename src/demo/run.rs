@@ -52,7 +52,7 @@ pub struct NodeArgs {
 
     #[arg(long = "signature-sleep-time", default_value = "5")]
     signature_sleep_time: u64,
-    
+
     #[arg(long = "node-url", default_value = None)]
     node_url: Option<String>,
 }
@@ -149,7 +149,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
         3,
         sign_input_channel_sender,
         args.signature_sleep_time,
-        args.node_url
+        args.node_url,
     )?;
 
     is_completed.store(true, Ordering::SeqCst);

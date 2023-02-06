@@ -386,6 +386,7 @@ fn test_generic_store_request() {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct GenericResponse {
+    pub(crate) committee_did_url: String,
     pub(crate) request_id: RequestId,
     pub(crate) result: ResponseState,
     pub(crate) output_location: Option<OutputUri>,
@@ -413,6 +414,7 @@ impl TryFrom<NodeMessage> for GenericResponse {
     fn try_from(value: NodeMessage) -> Result<Self, Self::Error> {
         match value {
             NodeMessage::StoreResponse(r) => Ok(Self {
+                committee_did_url: "".to_owned(),
                 request_id: RequestId("".to_owned()),
                 result: ResponseState::Success,
                 signature_hex: None,
@@ -421,6 +423,7 @@ impl TryFrom<NodeMessage> for GenericResponse {
             }),
             NodeMessage::GetResponse(r) => match r {
                 GetResponse::Success { data, signature } => Ok(Self {
+                    committee_did_url: "".to_owned(),
                     request_id: RequestId("".to_owned()),
                     result: ResponseState::Success,
                     signature_hex: None,
@@ -428,6 +431,7 @@ impl TryFrom<NodeMessage> for GenericResponse {
                     data: None,
                 }),
                 GetResponse::Failure(f) => Ok(Self {
+                    committee_did_url: "".to_owned(),
                     request_id: RequestId("".to_owned()),
                     result: ResponseState::Failure,
                     signature_hex: None,
@@ -436,6 +440,7 @@ impl TryFrom<NodeMessage> for GenericResponse {
                 }),
             },
             NodeMessage::DeleteResponse(r) => Ok(Self {
+                committee_did_url: "".to_owned(),
                 request_id: RequestId("".to_owned()),
                 result: ResponseState::Success,
                 signature_hex: None,

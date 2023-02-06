@@ -17,19 +17,23 @@ use std::{
 };
 
 use actix_web::{App, HttpServer};
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
-use api::routes::{AppData, request::GenericResponse};
+use api::routes::{request::GenericResponse, AppData};
 
 use clap::Parser;
 use demo::{
+    node::NodeSignatureLog,
     run::{run_node, NodeArgs},
     run_iota::{self, IotaNodeArgs},
 };
 
 use did::resolve_document;
-use dlt::iota::{client::iota_client, Publisher, resolve_did};
-use identity_iota::{iota_core::{Network, IotaDID}, core::ToJson};
+use dlt::iota::{client::iota_client, resolve_did, Publisher};
+use identity_iota::{
+    core::ToJson,
+    iota_core::{IotaDID, Network},
+};
 use kyber_rs::sign::eddsa;
 use net::host::Host;
 use s3::request;
@@ -65,15 +69,23 @@ enum Action {
     IotaNode(IotaNodeArgs),
     ApiSend(ApiSendArgs),
     Verify(VerifyArgs),
+    VerifyLog(VerifyLogArgs),
+}
+
+#[derive(Parser)]
+struct VerifyLogArgs {
+    #[arg(required = true, long = "log", help = "response from a dora committee")]
+    log: NodeSignatureLog,
 }
 
 #[derive(Parser)]
 struct VerifyArgs {
-    #[arg(required = true, long = "committee-did-url", help = "did url of the committee")]
-    committee_did_url: String,
-
-    #[arg(required = true, long = "dora-response", help = "response from a dora committee")]
-    dora_response: GenericResponse,   
+    #[arg(
+        required = true,
+        long = "dora-response",
+        help = "response from a dora committee"
+    )]
+    dora_response: GenericResponse,
 }
 
 #[derive(Parser)]
@@ -90,7 +102,12 @@ struct ApiSendArgs {
     #[arg(long, help = "storage id", default_value = None)]
     storage_id: Option<String>,
 
-    #[arg(long = "committee-index", default_value = "dora-governor-test", long, help = "index")]
+    #[arg(
+        long = "committee-index",
+        default_value = "dora-governor-test",
+        long,
+        help = "index"
+    )]
     committee_index: String,
 
     #[arg(long, help = "node DIDs")]
@@ -105,7 +122,7 @@ enum ApiAction {
     Generic,
     GenericGet,
     GenericStore,
-    Connect,
+    NewCommittee,
 }
 
 impl FromStr for ApiAction {
@@ -117,7 +134,7 @@ impl FromStr for ApiAction {
             "generic" => Ok(ApiAction::Generic),
             "generic-get" => Ok(ApiAction::GenericGet),
             "generic-store" => Ok(ApiAction::GenericStore),
-            "connect" => Ok(ApiAction::Connect),
+            "new-committee" => Ok(ApiAction::NewCommittee),
             _ => Err("not a valid action".to_owned()),
         }
     }
@@ -135,6 +152,7 @@ fn main() -> Result<()> {
         Action::IotaNode(args) => run_iota::run_node(args)?,
         Action::ApiSend(args) => api_send(args)?,
         Action::Verify(args) => verify(args)?,
+        Action::VerifyLog(args) => verify_log(args)?,
     }
 
     Ok(())
@@ -235,7 +253,7 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
             };
             serde_json::to_vec(&request)?
         }
-        ApiAction::Connect => {
+        ApiAction::NewCommittee => {
             let nodes = match args.nodes {
                 Some(n) => n,
                 None => return Err(anyhow::Error::msg("Missing node dids")),
@@ -258,12 +276,37 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
 }
 
 fn verify(args: VerifyArgs) -> Result<()> {
-    let public_key = resolve_document(args.committee_did_url, None)?.public_key()?;
-
     let mut response = args.dora_response;
+    let committee_did_url = response.committee_did_url.clone();
+
+    let public_key = resolve_document(committee_did_url, None)?.public_key()?;
+
     if let Some(signature_hex) = response.signature_hex.clone() {
-        response.signature_hex = None;    
-        eddsa::verify(&public_key, &response.to_jcs()?, &hex::decode(signature_hex)?)?;
+        response.signature_hex = None;
+        eddsa::verify(
+            &public_key,
+            &response.to_jcs()?,
+            &hex::decode(signature_hex)?,
+        )
+        .map_err(|_| anyhow::Error::msg("Signature is not valid"))?;
+        println!("Signature is valid")
+    } else {
+        bail!("Missing signature")
+    }
+
+    Ok(())
+}
+
+fn verify_log(args: VerifyLogArgs) -> Result<()> {
+    let mut log = args.log;
+    let did_url = log.sender.clone();
+
+    let public_key = resolve_document(did_url, None)?.public_key()?;
+
+    if let Some(signature_hex) = log.signature_hex.clone() {
+        log.signature_hex = None;
+        eddsa::verify(&public_key, &log.to_bytes()?, &hex::decode(signature_hex)?)
+            .map_err(|_| anyhow::Error::msg("Signature is not valid"))?;
         println!("Signature is valid")
     } else {
         bail!("Missing signature")

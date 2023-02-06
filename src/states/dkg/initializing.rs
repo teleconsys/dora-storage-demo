@@ -20,7 +20,7 @@ pub struct Initializing {
     num_participants: usize,
     public_keys: Vec<Point>,
     did_urls: Vec<String>,
-    node_url: Option<String>
+    node_url: Option<String>,
 }
 
 impl Display for Initializing {
@@ -30,7 +30,12 @@ impl Display for Initializing {
 }
 
 impl Initializing {
-    pub fn new(key: Pair<Point>, did_url: Option<String>, num_participants: usize, node_url: Option<String>) -> Initializing {
+    pub fn new(
+        key: Pair<Point>,
+        did_url: Option<String>,
+        num_participants: usize,
+        node_url: Option<String>,
+    ) -> Initializing {
         let mut public_keys = Vec::with_capacity(num_participants);
         public_keys.push(key.public.clone());
         let mut did_urls = Vec::with_capacity(num_participants);
@@ -43,7 +48,7 @@ impl Initializing {
             num_participants,
             public_keys,
             did_urls,
-            node_url
+            node_url,
         }
     }
 }
@@ -66,8 +71,12 @@ impl State<DkgTypes> for Initializing {
             }
             DkgMessage::DIDUrl(did_url) => {
                 self.did_urls.push(did_url.clone());
-                self.public_keys
-                    .push(resolve_document(did_url, self.node_url.clone()).unwrap().public_key().unwrap());
+                self.public_keys.push(
+                    resolve_document(did_url, self.node_url.clone())
+                        .unwrap()
+                        .public_key()
+                        .unwrap(),
+                );
                 DeliveryStatus::Delivered
             }
             m => DeliveryStatus::Unexpected(m),

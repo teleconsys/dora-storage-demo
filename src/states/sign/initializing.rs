@@ -195,23 +195,23 @@ impl Display for Initializing {
 impl State<SignTypes> for Initializing {
     fn initialize(&self) -> Vec<SignMessage> {
         let sleep_time = self.sleep_time;
-                let session_id = self.session_id.clone();
-                let sender = self.sender.clone();
+        let session_id = self.session_id.clone();
+        let sender = self.sender.clone();
 
-                log::info!(target: &log_target(&self.session_id),
+        log::info!(target: &log_target(&self.session_id),
                     "starting partial signatures countdown, {} seconds", sleep_time);
-                thread::spawn(move || {
-                    // sleeps to give time to the missing nodes
-                    
-                    std::thread::sleep(std::time::Duration::from_secs(sleep_time));
-                    // trigger advance messages in the case that no partial signature is received in the meantime
-                    sender
-                        .send(MessageWrapper {
-                            session_id,
-                            message: SignMessage::WaitingDone,
-                        })
-                        .unwrap();
-            });
+        thread::spawn(move || {
+            // sleeps to give time to the missing nodes
+
+            std::thread::sleep(std::time::Duration::from_secs(sleep_time));
+            // trigger advance messages in the case that no partial signature is received in the meantime
+            sender
+                .send(MessageWrapper {
+                    session_id,
+                    message: SignMessage::WaitingDone,
+                })
+                .unwrap();
+        });
 
         vec![SignMessage::PartialSignature(
             self.partial_signature.to_owned(),
@@ -278,5 +278,8 @@ impl State<SignTypes> for Initializing {
 }
 
 fn log_target(session_id: &str) -> String {
-    format!("fsm:{}:signature", session_id.chars().take(10).collect::<String>().yellow())
+    format!(
+        "fsm:{}:signature",
+        session_id.chars().take(10).collect::<String>().yellow()
+    )
 }

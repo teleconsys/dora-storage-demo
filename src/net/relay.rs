@@ -199,7 +199,7 @@ pub struct IotaBroadcastRelay<T, R: Receiver<T>> {
 }
 
 impl<T: Serialize, R: Receiver<T>> IotaBroadcastRelay<T, R> {
-    pub fn new(index: String, input: R, network: String, node_url: Option<String>,) -> Result<Self> {
+    pub fn new(index: String, input: R, network: String, node_url: Option<String>) -> Result<Self> {
         let net = match network.as_str() {
             "iota-main" => Network::Mainnet,
             "iota-dev" => Network::Devnet,

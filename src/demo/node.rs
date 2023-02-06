@@ -9,7 +9,7 @@ use crate::api::routes::request::{
 };
 use crate::api::routes::save::{StoreError, StoreRequest, StoreResponse};
 use crate::api::routes::{GenericRequest, NodeMessage};
-use crate::demo::{node, generic_log_target};
+use crate::demo::node;
 use crate::did::{new_document, resolve_document};
 use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates, Initializing};
 use crate::dlt::iota::{Listener, Publisher};
@@ -19,6 +19,7 @@ use crate::states::feed::{Feed, MessageWrapper};
 use crate::states::fsm::{StateMachine, StateMachineTypes};
 use crate::store::Storage;
 use anyhow::bail;
+use colored::Colorize;
 use enum_display::EnumDisplay;
 use identity_iota::core::ToJson;
 use identity_iota::iota_core::MessageId;
@@ -92,12 +93,17 @@ impl Node {
         num_participants: usize,
         signature_sender: Sender<MessageWrapper<SignMessage>>,
         signature_sleep_time: u64,
-        node_url: Option<String>
+        node_url: Option<String>,
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let dkg_id = "First DKG";
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
-        let dkg_initial_state = Initializing::new(self.keypair.clone(), did_url, num_participants, node_url.clone());
+        let dkg_initial_state = Initializing::new(
+            self.keypair.clone(),
+            did_url,
+            num_participants,
+            node_url.clone(),
+        );
         let dkg_feed = Feed::new(&self.dkg_input_channel, dkg_id.to_string());
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
@@ -178,7 +184,7 @@ impl Node {
         time_resolution: usize,
         signature_sender: Sender<MessageWrapper<SignMessage>>,
         signature_sleep_time: u64,
-        node_url: Option<String>
+        node_url: Option<String>,
     ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
@@ -188,7 +194,7 @@ impl Node {
             own_did_url.clone(),
             did_urls,
             num_participants,
-            node_url.clone()
+            node_url.clone(),
         )?;
         let mut dkg_fsm = StateMachine::new(
             Box::new(dkg_initial_state),
@@ -248,7 +254,7 @@ impl Node {
                 processed_partial_owners,
                 bad_signers,
                 did_urls.clone(),
-                node_url.clone()
+                node_url.clone(),
             )?;
             iota_logger.publish(&mut dkg_log, node_url.clone())?;
 
@@ -270,7 +276,7 @@ impl Node {
                 signature_sleep_time,
                 iota_logger,
                 did_urls,
-                node_url.clone()
+                node_url.clone(),
             )?;
             Ok((signature, dist_pub_key))
         } else {
@@ -285,7 +291,7 @@ impl Node {
                 signature_sleep_time,
                 iota_logger,
                 did_urls,
-                node_url.clone()
+                node_url.clone(),
             )?;
             Ok((Signature::from(vec![]), dist_pub_key))
         }
@@ -302,19 +308,23 @@ impl Node {
         signature_sleep_time: u64,
         logger: NodeSignatureLogger,
         did_urls: Vec<String>,
-        node_url: Option<String>
+        node_url: Option<String>,
     ) -> Result<(), anyhow::Error> {
         let network = match network_name.as_str() {
             "iota-main" => Network::Mainnet,
             "iota-dev" => Network::Devnet,
             _ => panic!("unsupported network"),
         };
-        let api_index = did_url.split(':').last().unwrap();
+        let binding = did_url.clone();
+        let api_index = binding.split(':').last().unwrap();
         let mut api_input = Listener::new(network.clone(), node_url.clone())?;
         let api_output = Publisher::new(network.clone(), node_url.clone())?;
         let api_node = ApiNode {
             storage: storage.unwrap(),
-            iota_client: crate::dlt::iota::client::iota_client(network.name_str(), node_url.clone())?,
+            iota_client: crate::dlt::iota::client::iota_client(
+                network.name_str(),
+                node_url.clone(),
+            )?,
             dkg,
             secret: self.keypair.private.clone(),
             public_key: self.keypair.public.clone(),
@@ -346,8 +356,9 @@ impl Node {
                     &self.sign_output_channel,
                     &req_id.to_string(),
                     logger.clone(),
+                    did_url.clone(),
                     did_urls.clone(),
-                    node_url.clone()
+                    node_url.clone(),
                 )
                 .map_err(|e| anyhow::Error::msg(format!("{:?}", e)))
             {
@@ -374,7 +385,11 @@ impl Node {
     }
 }
 
-fn public_to_did(did_urls: &[String], public_key: Point, node_url: Option<String>) -> anyhow::Result<String> {
+fn public_to_did(
+    did_urls: &[String],
+    public_key: Point,
+    node_url: Option<String>,
+) -> anyhow::Result<String> {
     for did_url in did_urls.iter() {
         if resolve_document(did_url.to_string(), node_url.clone())?.public_key()? == public_key {
             return Ok(did_url.to_string());
@@ -402,8 +417,9 @@ impl ApiNode {
         nodes_output: &Sender<MessageWrapper<SignMessage>>,
         session_id: &str,
         signature_logger: NodeSignatureLogger,
+        committee_did_url: String,
         did_urls: Vec<String>,
-        node_url: Option<String>
+        node_url: Option<String>,
     ) -> Result<Option<(GenericResponse, Vec<String>)>, ApiNodeError> {
         match message {
             NodeMessage::StoreRequest(r) => Ok(Some(self.handle_store_request(
@@ -413,7 +429,8 @@ impl ApiNode {
                 did_urls,
                 nodes_input,
                 nodes_output,
-                node_url
+                node_url,
+                committee_did_url,
             )?)),
             NodeMessage::GetRequest(r) => Ok(Some(self.handle_get_request(
                 r,
@@ -422,7 +439,8 @@ impl ApiNode {
                 session_id,
                 signature_logger,
                 did_urls,
-                node_url
+                node_url,
+                committee_did_url,
             )?)),
             NodeMessage::DeleteRequest(r) => Ok(Some(self.handle_delete_request(
                 r,
@@ -444,13 +462,15 @@ impl ApiNode {
         did_urls: Vec<String>,
         sign_input: &Receiver<MessageWrapper<SignMessage>>,
         sign_output: &Sender<MessageWrapper<SignMessage>>,
-        node_url: Option<String>
+        node_url: Option<String>,
+        committee_did_url: String,
     ) -> Result<(GenericResponse, Vec<String>), ApiNodeError> {
         let data = self.get_data(&request.input)?;
         if let StorageUri::Dora(DoraLocalUri(item_name)) = request.storage_uri {
             match self.storage.put(item_name, &data) {
                 Ok(()) => {
                     let mut resp = GenericResponse {
+                        committee_did_url,
                         request_id: request::RequestId(session_id.to_owned()),
                         result: request::ResponseState::Success,
                         signature_hex: None,
@@ -468,15 +488,21 @@ impl ApiNode {
                         Ok(state) => state,
                         Err(e) => return Err(ApiNodeError::SignatureError(e)),
                     };
-                    let (signature, working_nodes) =
-                        manage_signature_terminal_state(final_state, session_id, did_urls, logger, node_url)
-                            .map_err(ApiNodeError::SignatureError)?;
+                    let (signature, working_nodes) = manage_signature_terminal_state(
+                        final_state,
+                        session_id,
+                        did_urls,
+                        logger,
+                        node_url,
+                    )
+                    .map_err(ApiNodeError::SignatureError)?;
                     resp.signature_hex = Some(hex::encode(signature.0));
 
                     Ok((resp, working_nodes))
                 }
                 Err(_) => {
                     let mut resp = GenericResponse {
+                        committee_did_url,
                         request_id: request::RequestId(session_id.to_owned()),
                         result: request::ResponseState::Failure,
                         signature_hex: None,
@@ -494,9 +520,14 @@ impl ApiNode {
                         Ok(state) => state,
                         Err(e) => return Err(ApiNodeError::SignatureError(e)),
                     };
-                    let (signature, working_nodes) =
-                        manage_signature_terminal_state(final_state, session_id, did_urls, logger, node_url)
-                            .map_err(ApiNodeError::SignatureError)?;
+                    let (signature, working_nodes) = manage_signature_terminal_state(
+                        final_state,
+                        session_id,
+                        did_urls,
+                        logger,
+                        node_url,
+                    )
+                    .map_err(ApiNodeError::SignatureError)?;
                     resp.signature_hex = Some(hex::encode(signature.0));
 
                     Ok((resp, working_nodes))
@@ -517,12 +548,14 @@ impl ApiNode {
         session_id: &str,
         logger: NodeSignatureLogger,
         did_urls: Vec<String>,
-        node_url: Option<String>
+        node_url: Option<String>,
+        committee_did_url: String,
     ) -> Result<(GenericResponse, Vec<String>), ApiNodeError> {
         let data = match self.get_data(&request.input) {
             Ok(d) => d,
             Err(e) => {
                 let mut resp = GenericResponse {
+                    committee_did_url,
                     request_id: request::RequestId(session_id.to_owned()),
                     result: request::ResponseState::Failure,
                     signature_hex: None,
@@ -540,9 +573,14 @@ impl ApiNode {
                     Ok(state) => state,
                     Err(e) => return Err(ApiNodeError::SignatureError(e)),
                 };
-                let (signature, working_nodes) =
-                    manage_signature_terminal_state(final_state, session_id, did_urls, logger, node_url)
-                        .map_err(ApiNodeError::SignatureError)?;
+                let (signature, working_nodes) = manage_signature_terminal_state(
+                    final_state,
+                    session_id,
+                    did_urls,
+                    logger,
+                    node_url,
+                )
+                .map_err(ApiNodeError::SignatureError)?;
                 resp.signature_hex = Some(hex::encode(signature.0));
 
                 return Ok((resp, working_nodes));
@@ -555,6 +593,7 @@ impl ApiNode {
         };
 
         let mut resp = GenericResponse {
+            committee_did_url,
             request_id: request::RequestId(session_id.to_owned()),
             result: request::ResponseState::Success,
             signature_hex: None,
@@ -718,7 +757,11 @@ pub fn new_node_signature_logger(
 }
 
 impl NodeSignatureLogger {
-    pub fn publish(&self, log: &mut NodeSignatureLog, node_url: Option<String>) -> anyhow::Result<()> {
+    pub fn publish(
+        &self,
+        log: &mut NodeSignatureLog,
+        node_url: Option<String>,
+    ) -> anyhow::Result<()> {
         let network = match self.network.as_str() {
             "iota-main" => Network::Mainnet,
             "iota-dev" => Network::Devnet,
@@ -729,7 +772,7 @@ impl NodeSignatureLogger {
 
         let msg_id = tokio::runtime::Runtime::new()?
             .block_on(publisher.publish(&log.to_jcs()?, Some(self.committee_index.clone())))?;
-        log::info!(target: &generic_log_target(&log.session_id),
+        log::info!(target: &signature_log_target(&log.session_id),
             "log published (msg_id: {})", msg_id);
         Ok(())
     }
@@ -744,11 +787,11 @@ impl NodeSignatureLogger {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NodeSignatureLog {
-    session_id: String,
-    sender: String,
-    absent_nodes: Vec<String>,
-    bad_signers: Vec<String>,
-    signature: Vec<u8>,
+    pub(crate) session_id: String,
+    pub(crate) sender: String,
+    pub(crate) absent_nodes: Vec<String>,
+    pub(crate) bad_signers: Vec<String>,
+    pub(crate) signature_hex: Option<String>,
 }
 
 pub fn new_signature_log(
@@ -756,9 +799,8 @@ pub fn new_signature_log(
     processed_partial_owners: Vec<Point>,
     bad_signers: Vec<Point>,
     did_urls: Vec<String>,
-    node_url: Option<String>
+    node_url: Option<String>,
 ) -> anyhow::Result<(NodeSignatureLog, Vec<String>)> {
-
     // find out who didn't send a partial signature
     let mut processed_partial_owners_dids = vec![];
     for owner in processed_partial_owners {
@@ -783,18 +825,26 @@ pub fn new_signature_log(
         }
     }
 
-    log::info!(target: &generic_log_target(&session_id),
-        "signature success \n\t nodes that didn't participate: {:?} \n\t nodes that didn't provide a correct signature: {:?}", absent_nodes, bad_signers_nodes);
+    log::info!(target: &signature_log_target(&session_id),
+        "signature success, nodes that didn't participate: {:?}, nodes that didn't provide a correct signature: {:?}", absent_nodes, bad_signers_nodes);
     Ok((
         NodeSignatureLog {
             session_id,
             sender: "".to_string(),
             absent_nodes,
             bad_signers: bad_signers_nodes,
-            signature: vec![],
+            signature_hex: None,
         },
         working_nodes,
     ))
+}
+
+impl FromStr for NodeSignatureLog {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::de::from_str(s)
+    }
 }
 
 impl NodeSignatureLog {
@@ -803,17 +853,20 @@ impl NodeSignatureLog {
     }
 
     fn add_signature(&mut self, signature: &[u8]) {
-        self.signature = signature.to_vec();
+        self.signature_hex = Some(hex::encode(signature));
     }
 
-    fn to_bytes(&self) -> anyhow::Result<Vec<u8>> {
-        match bincode::serialize(self) {
-            Ok(v) => Ok(v),
-            Err(e) => {
-                bail!(MarshallingError::Serialization(e))
-            }
-        }
+    pub(crate) fn to_bytes(&self) -> anyhow::Result<Vec<u8>> {
+        self.to_jcs()
+            .map_err(|_| anyhow::Error::msg("can not serialize log"))
     }
+}
+
+pub fn signature_log_target(session_id: &str) -> String {
+    format!(
+        "sign:{}",
+        session_id.chars().take(10).collect::<String>().yellow()
+    )
 }
 
 fn manage_signature_terminal_state(
@@ -821,7 +874,7 @@ fn manage_signature_terminal_state(
     session_id: &str,
     did_urls: Vec<String>,
     logger: NodeSignatureLogger,
-    node_url: Option<String>
+    node_url: Option<String>,
 ) -> anyhow::Result<(Signature, Vec<String>)> {
     match final_state {
         SignTerminalStates::Completed(signature, processed_partial_owners, bad_signers) => {
@@ -830,16 +883,20 @@ fn manage_signature_terminal_state(
                 processed_partial_owners,
                 bad_signers,
                 did_urls,
-                node_url.clone()
+                node_url.clone(),
             )
             .map_err(ApiNodeError::LogError)?;
-            logger.publish(&mut log, node_url).map_err(ApiNodeError::LogError)?;
+            logger
+                .publish(&mut log, node_url)
+                .map_err(ApiNodeError::LogError)?;
 
             Ok((signature, working_nodes))
         }
         SignTerminalStates::Failed => {
-            log::error!(target: &generic_log_target(session_id),
-                "signature failed");
+            log::error!(
+                target: &signature_log_target(session_id),
+                "signature failed"
+            );
             Err(anyhow::Error::msg("Sign Failed"))
         }
     }

@@ -93,7 +93,7 @@ pub fn publish_did(
     document: &mut IotaDocument,
     signature: &[u8],
     network_name: String,
-    node_url: Option<String>
+    node_url: Option<String>,
 ) -> Result<()> {
     let sig_b58 = BaseEncoding::encode_base58(signature);
 

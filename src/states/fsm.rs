@@ -46,7 +46,14 @@ pub struct StateMachine<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::
 
 impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMachine<'a, T, R> {
     fn log_target(&self) -> String {
-        format!("fsm:{}", self.session_id.chars().take(10).collect::<String>().yellow())
+        format!(
+            "fsm:{}",
+            self.session_id
+                .chars()
+                .take(10)
+                .collect::<String>()
+                .yellow()
+        )
     }
     pub fn new<F: Into<Feed<T::Message, R>>>(
         initial_state: BoxedState<T>,
@@ -83,10 +90,13 @@ impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMac
                 self.state.to_string().cyan()
             );
             loop {
-                let transition: Transition<T> = self
-                    .state
-                    .advance()
-                    .map_err(|e| Error::msg(format!("[{}] failed transition: {}", self.session_id.chars().take(10).collect::<String>(), e)))?;
+                let transition: Transition<T> = self.state.advance().map_err(|e| {
+                    Error::msg(format!(
+                        "[{}] failed transition: {}",
+                        self.session_id.chars().take(10).collect::<String>(),
+                        e
+                    ))
+                })?;
                 match transition {
                     Transition::Same => {
                         match self.message_input.next() {
@@ -102,7 +112,9 @@ impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMac
                                 DeliveryStatus::Error(e) => {
                                     return Err(Error::msg(format!(
                                         "[{}][{}] {}",
-                                        self.session_id.chars().take(10).collect::<String>(), self.state, e
+                                        self.session_id.chars().take(10).collect::<String>(),
+                                        self.state,
+                                        e
                                     )));
                                 }
                             },
