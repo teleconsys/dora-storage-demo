@@ -159,7 +159,7 @@ impl Node {
                 // Publish signed DID
                 let did_url = document.did_url();
                 document.publish(&signature.to_vec(), node_url.clone())?;
-                log::info!("committee's DID has been published, DID URL: {}", did_url);
+                log::info!("committee's DID has been published: {}", did_url);
 
                 let resolved_did = resolve_document(did_url.clone(), node_url.clone())?;
 
@@ -170,7 +170,7 @@ impl Node {
             Ok((signature, dist_pub_key))
         } else {
             let did_url = document.did_url();
-            log::error!("could not sign committee's DID, DID URL: {}", did_url);
+            log::error!("could not sign committee's DID: {}", did_url);
             Ok((Signature::from(vec![]), dist_pub_key))
         }
     }
@@ -270,7 +270,7 @@ impl Node {
             if own_did_url == working_nodes[0] {
                 log::info!("publishing committee's DID...");
                 document.publish(&signature.to_vec(), node_url.clone())?;
-                log::info!("committee's DID has been published, DID URL: {}", did_url);
+                log::info!("committee's DID has been published: {}", did_url);
                 //let resolved_did = resolve_document(did_url.clone())?;
             }
 
@@ -288,7 +288,7 @@ impl Node {
             )?;
             Ok((signature, dist_pub_key))
         } else {
-            log::error!("could not sign committee's DID, DID URL: {}", did_url);
+            log::error!("could not sign committee's DID: {}", did_url);
             self.run_api_node(
                 did_url,
                 own_did_url,

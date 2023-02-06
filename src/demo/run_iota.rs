@@ -75,16 +75,19 @@ pub fn run_node(args: IotaNodeArgs) -> Result<()> {
         log::trace!("storage is healthy");
     }
 
+    log::info!("generating node's keypair");
     let suite = SuiteEd25519::new_blake3_sha256_ed25519();
     let keypair = new_key_pair(&suite)?;
 
     let network = args.did_network.clone();
     let eddsa = EdDSA::from(keypair.clone());
+    log::info!("creating node's DID document");
     let document = new_document(&eddsa.public.marshal_binary()?, &network, None, None)?;
     let signature = eddsa.sign(&document.to_bytes()?)?;
+
     let did_url = document.did_url();
     document.publish(&signature, args.node_url.clone())?;
-    log::info!("node's DID has been published, DID URL: {}", did_url);
+    log::info!("node's DID document has been published: {}", did_url);
 
     let is_completed = Arc::new(AtomicBool::new(false));
 
