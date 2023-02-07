@@ -68,6 +68,9 @@ enum Action {
     Api(ApiArgs),
     IotaNode(IotaNodeArgs),
     ApiSend(ApiSendArgs),
+    Request(RequestArgs),
+    Send(SendArgs),
+    NewCommittee(NewCommitteeArgs),
     Verify(VerifyArgs),
     VerifyLog(VerifyLogArgs),
 }
@@ -79,9 +82,48 @@ struct VerifyLogArgs {
 }
 
 #[derive(Parser)]
+struct SendArgs {
+    #[arg(required = true, long = "message", help = "message to send")]
+    message: String,
+
+    #[arg(long = "index", help = "index of the message", default_value = "dora_input_message")]
+    index: String,
+}
+
+#[derive(Parser)]
 struct VerifyArgs {
     #[arg(required = true, long = "committee-log", help = "dora committee log")]
     committee_log: CommitteeLog,
+}
+
+#[derive(Parser)]
+struct RequestArgs {
+    #[arg(default_value = "", long, help = "input uri")]
+    input_uri: String,
+
+    #[arg(long, help = "storage id", default_value = None)]
+    storage_id: Option<String>,
+
+    #[arg(
+        long = "committee-index",
+        long,
+        help = "index"
+    )]
+    committee_index: String,
+}
+
+#[derive(Parser)]
+struct NewCommitteeArgs {
+    #[arg(
+        long = "governor_index",
+        default_value = "dora-governor-test",
+        long,
+        help = "index"
+    )]
+    governor_index: String,
+
+    #[arg(long, help = "node DIDs")]
+    nodes: Option<String>,
 }
 
 #[derive(Parser)]
@@ -115,10 +157,8 @@ enum ApiAction {
     Store,
     Get,
     Delete,
-    Generic,
     GenericGet,
     GenericStore,
-    NewCommittee,
 }
 
 impl FromStr for ApiAction {
@@ -127,10 +167,8 @@ impl FromStr for ApiAction {
             "store" => Ok(ApiAction::Store),
             "get" => Ok(ApiAction::Get),
             "delete" => Ok(ApiAction::Delete),
-            "generic" => Ok(ApiAction::Generic),
             "generic-get" => Ok(ApiAction::GenericGet),
             "generic-store" => Ok(ApiAction::GenericStore),
-            "new-committee" => Ok(ApiAction::NewCommittee),
             _ => Err("not a valid action".to_owned()),
         }
     }
@@ -147,8 +185,11 @@ fn main() -> Result<()> {
         Action::Api(args) => run_api(args)?,
         Action::IotaNode(args) => run_iota::run_node(args)?,
         Action::ApiSend(args) => api_send(args)?,
+        Action::Request(args) => send_request(args)?,
+        Action::NewCommittee(args) => new_committee(args)?,
         Action::Verify(args) => verify(args)?,
         Action::VerifyLog(args) => verify_log(args)?,
+        Action::Send(args) => send_message(args)?,
     }
 
     Ok(())
@@ -235,34 +276,7 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
             };
             serde_json::to_vec(&request)?
         }
-        ApiAction::Generic => {
-            let mut storage_id = StorageUri::None;
-            if let Some(id) = args.storage_id {
-                storage_id = StorageUri::Storage(StorageLocalUri(id));
-            }
-            let request = GenericRequest {
-                input_uri: InputUri::from_str(&args.input_uri).unwrap(),
-                output_uri: OutputUri::None,
-                execution: Execution::None,
-                signature: false,
-                storage_uri: storage_id,
-            };
-            serde_json::to_vec(&request)?
-        }
-        ApiAction::NewCommittee => {
-            let nodes = match args.nodes {
-                Some(n) => n,
-                None => return Err(anyhow::Error::msg("Missing node dids")),
-            };
-
-            let nodes = nodes
-                .split(',')
-                .map(|d| format!("\"did:iota:{}\"", d))
-                .collect::<Vec<String>>()
-                .join(",");
-
-            format!("{{\"nodes\": [{}]}}", nodes).as_bytes().to_owned()
-        }
+        
     };
     let publisher = Publisher::new(Network::Mainnet, None)?;
     let rt = tokio::runtime::Runtime::new()?;
@@ -314,5 +328,57 @@ fn verify_log(args: VerifyLogArgs) -> Result<()> {
         bail!("Missing signature")
     }
 
+    Ok(())
+}
+
+fn send_request(args: RequestArgs) -> Result<()> {
+    let mut storage_id = StorageUri::None;
+    if let Some(id) = args.storage_id {
+        storage_id = StorageUri::Storage(StorageLocalUri(id));
+    }
+    let request = GenericRequest {
+        input_uri: InputUri::from_str(&args.input_uri).unwrap(),
+        output_uri: OutputUri::None,
+        execution: Execution::None,
+        signature: false,
+        storage_uri: storage_id,
+    };
+    let request = serde_json::to_vec(&request)?;
+
+    let publisher = Publisher::new(Network::Mainnet, None)?;
+    let rt = tokio::runtime::Runtime::new()?;
+    let result = rt.block_on(publisher.publish(&request, Some(args.committee_index)))?;
+    println!("{}", result);
+    Ok(())
+}
+
+fn new_committee(args: NewCommitteeArgs) -> Result<()> {
+    let nodes = match args.nodes {
+        Some(n) => n,
+        None => return Err(anyhow::Error::msg("Missing node dids")),
+    };
+
+    let nodes = nodes
+        .split(',')
+        .map(|d| format!("\"did:iota:{}\"", d))
+        .collect::<Vec<String>>()
+        .join(",");
+
+    let request = format!("{{\"nodes\": [{}]}}", nodes).as_bytes().to_owned();
+
+    let publisher = Publisher::new(Network::Mainnet, None)?;
+    let rt = tokio::runtime::Runtime::new()?;
+    let result = rt.block_on(publisher.publish(&request, Some(args.governor_index)))?;
+    println!("{}", result);
+    Ok(())
+}
+
+fn send_message(args: SendArgs) -> Result<()> {
+    let message = args.message.as_bytes().to_owned();
+
+    let publisher = Publisher::new(Network::Mainnet, None)?;
+    let rt = tokio::runtime::Runtime::new()?;
+    let result = rt.block_on(publisher.publish(&message, Some(args.index)))?;
+    println!("{}", result);
     Ok(())
 }
