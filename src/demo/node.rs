@@ -30,6 +30,7 @@ use kyber_rs::encoding::{BinaryMarshaler, Marshaling, MarshallingError};
 use kyber_rs::group::edwards25519::{Scalar, SuiteEd25519};
 use kyber_rs::share::dkg::rabin::DistKeyGenerator;
 use kyber_rs::sign::eddsa::{self, EdDSA};
+use log::info;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -265,12 +266,13 @@ impl Node {
             )?;
             iota_logger.publish(&mut dkg_log, node_url.clone())?;
 
+            log::info!("committee's DID is: {}", did_url);
             // Publish signed DID if the node is the first on the list
             working_nodes.sort();
             if own_did_url == working_nodes[0] {
                 log::info!("publishing committee's DID...");
                 document.publish(&signature.to_vec(), node_url.clone())?;
-                log::info!("committee's DID has been published: {}", did_url);
+                log::info!("committee's DID has been published");
                 //let resolved_did = resolve_document(did_url.clone())?;
             }
 
@@ -288,7 +290,7 @@ impl Node {
             )?;
             Ok((signature, dist_pub_key))
         } else {
-            log::error!("could not sign committee's DID: {}", did_url);
+            log::error!("could not sign committee's DID");
             self.run_api_node(
                 did_url,
                 own_did_url,
@@ -385,6 +387,7 @@ impl Node {
                 // Publish signed DID if the node is the first on the list
                 wn.sort();
                 if own_did_url == wn[0] {
+                    log::info!("publishing committee's task log for request [{}]...", session_id);
                     match rt.block_on(api_output.publish(&encoded, Some(api_index.to_owned()))) {
                         Ok(i) => log::info!(
                             "committee's task log for request [{}] published (msg_id: {})",
