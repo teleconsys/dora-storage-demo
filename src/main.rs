@@ -289,7 +289,7 @@ fn verify(args: VerifyArgs) -> Result<()> {
     let mut response = args.committee_log;
     let committee_did_url = response.committee_did.clone();
 
-    println!("Retreivieng committee's public key from DID document");
+    println!("Retrieving committee's public key from DID document");
     let public_key = resolve_document(committee_did_url, None)?.public_key()?;
     println!("Public key retrieved");
     println!("Performing signature validation");
@@ -314,7 +314,7 @@ fn verify_log(args: VerifyLogArgs) -> Result<()> {
     let mut log = args.log;
     let did_url = log.sender_did.clone();
 
-    println!("Retrievieng node's public key from DID document");
+    println!("Retrieving node's public key from DID document");
     let public_key = resolve_document(did_url, None)?.public_key()?;
     println!("Public key retrieved");
     println!("Performing signature validation");
