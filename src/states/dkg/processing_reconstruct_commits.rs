@@ -50,7 +50,7 @@ impl State<DkgTypes> for ProcessingReconstructCommits {
         match message {
             DkgMessage::ReconstructCommits(rc) => match self.dkg.process_reconstruct_commits(&rc) {
                 Ok(()) => DeliveryStatus::Delivered,
-                Err(e) => DeliveryStatus::Error(e),
+                Err(e) => DeliveryStatus::Error(e.into()),
             },
             m => DeliveryStatus::Unexpected(m),
         }

@@ -62,7 +62,7 @@ impl State<DkgTypes> for ProcessingSecretCommits {
                         self.optional_complaints.push(optional_complaint);
                         DeliveryStatus::Delivered
                     }
-                    Err(e) => DeliveryStatus::Error(e),
+                    Err(e) => DeliveryStatus::Error(e.into()),
                 }
             }
             m => DeliveryStatus::Unexpected(m),

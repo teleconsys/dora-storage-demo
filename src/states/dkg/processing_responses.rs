@@ -3,7 +3,13 @@ use std::fmt::Display;
 use anyhow::Error;
 use kyber_rs::{
     group::edwards25519::SuiteEd25519,
-    share::dkg::rabin::{DistKeyGenerator, Justification, Response},
+    share::{
+        dkg::{
+            rabin::{DistKeyGenerator, Justification, Response},
+            DKGError,
+        },
+        vss::VSSError,
+    },
 };
 
 use crate::states::{
@@ -66,10 +72,10 @@ impl State<DkgTypes> for ProcessingResponses {
                     self.optional_justifications.push(justification);
                     DeliveryStatus::Delivered
                 }
-                Err(e) if e.to_string() == "vss: already existing response from same origin" => {
+                Err(DKGError::VSSError(VSSError::ResponseAlreadyExisting)) => {
                     DeliveryStatus::Delivered
                 }
-                Err(e) => DeliveryStatus::Error(e),
+                Err(e) => DeliveryStatus::Error(e.into()),
             },
             m => DeliveryStatus::Unexpected(m),
         }

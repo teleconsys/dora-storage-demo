@@ -61,7 +61,7 @@ impl State<DkgTypes> for ProcessingComplaints {
                     self.reconstruct_commits.push(reconstruct_commits);
                     DeliveryStatus::Delivered
                 }
-                Err(e) => DeliveryStatus::Error(e),
+                Err(e) => DeliveryStatus::Error(e.into()),
             },
             m => DeliveryStatus::Unexpected(m),
         }

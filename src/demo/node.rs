@@ -387,7 +387,10 @@ impl Node {
                 // Publish signed DID if the node is the first on the list
                 wn.sort();
                 if own_did_url == wn[0] {
-                    log::info!("publishing committee's task log for request [{}]...", session_id);
+                    log::info!(
+                        "publishing committee's task log for request [{}]...",
+                        session_id
+                    );
                     match rt.block_on(api_output.publish(&encoded, Some(api_index.to_owned()))) {
                         Ok(i) => log::info!(
                             "committee's task log for request [{}] published (msg_id: {})",
