@@ -86,7 +86,11 @@ struct SendArgs {
     #[arg(required = true, long = "message", help = "message to send")]
     message: String,
 
-    #[arg(long = "index", help = "index of the message", default_value = "dora_input_message")]
+    #[arg(
+        long = "index",
+        help = "index of the message",
+        default_value = "dora_input_message"
+    )]
     index: String,
 }
 
@@ -104,11 +108,7 @@ struct RequestArgs {
     #[arg(long, help = "storage id", default_value = None)]
     storage_id: Option<String>,
 
-    #[arg(
-        long = "committee-index",
-        long,
-        help = "index"
-    )]
+    #[arg(long = "committee-index", long, help = "index")]
     committee_index: String,
 }
 
@@ -276,7 +276,6 @@ fn api_send(args: ApiSendArgs) -> Result<()> {
             };
             serde_json::to_vec(&request)?
         }
-        
     };
     let publisher = Publisher::new(Network::Mainnet, None)?;
     let rt = tokio::runtime::Runtime::new()?;

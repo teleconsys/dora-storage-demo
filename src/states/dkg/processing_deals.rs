@@ -59,7 +59,7 @@ impl State<DkgTypes> for ProcessingDeals {
                         self.responses.push(response);
                         DeliveryStatus::Delivered
                     }
-                    Err(e) => DeliveryStatus::Error(e),
+                    Err(e) => DeliveryStatus::Error(e.into()),
                 }
             }
             DkgMessage::Deal { .. } => {

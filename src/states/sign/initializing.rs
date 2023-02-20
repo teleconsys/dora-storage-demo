@@ -7,7 +7,7 @@ use thiserror::Error;
 use kyber_rs::{
     group::edwards25519::{Point, Scalar, SuiteEd25519},
     share::dkg::rabin::{DistKeyGenerator, DistKeyShare},
-    sign::dss::{new_dss, PartialSig, DSS},
+    sign::dss::{new_dss, DSSError, PartialSig, DSS},
 };
 
 use crate::states::{
@@ -226,17 +226,18 @@ impl State<SignTypes> for Initializing {
                         .push(self.dss.participants[ps.partial.i].clone());
                     DeliveryStatus::Delivered
                 }
-                Err(e) => {
-                    if e.to_string() == "dss: partial signature not valid" {
-                        self.bad_signers
-                            .push(self.dss.participants[ps.partial.i].clone());
-                        self.processed_partial_owners
-                            .push(self.dss.participants[ps.partial.i].clone());
-                        DeliveryStatus::Delivered
-                    } else {
-                        DeliveryStatus::Error(e)
-                    }
+                Err(
+                    DSSError::InvalidIndex
+                    | DSSError::InvalidSessionId
+                    | DSSError::InvalidPartialSignature,
+                ) => {
+                    self.bad_signers
+                        .push(self.dss.participants[ps.partial.i].clone());
+                    self.processed_partial_owners
+                        .push(self.dss.participants[ps.partial.i].clone());
+                    DeliveryStatus::Delivered
                 }
+                Err(e) => DeliveryStatus::Error(e.into()),
             },
             SignMessage::WaitingDone => {
                 self.waiting = WaitingState::Done;
@@ -249,12 +250,17 @@ impl State<SignTypes> for Initializing {
         match self.waiting {
             WaitingState::Waiting => {
                 if self.processed_partial_owners.len() == self.dss.participants.len() {
-                    let signature = self.dss.signature()?;
-                    Ok(Transition::Terminal(SignTerminalStates::Completed(
-                        Signature(signature),
-                        self.processed_partial_owners.clone(),
-                        self.bad_signers.clone(),
-                    )))
+                    match self.dss.signature() {
+                        Ok(s) => Ok(Transition::Terminal(SignTerminalStates::Completed(
+                            Signature(s),
+                            self.processed_partial_owners.clone(),
+                            self.bad_signers.clone(),
+                        ))),
+                        Err(e) => {
+                            log::info!(target: &log_target(&self.session_id), "failed to sign: {}", e.to_string());
+                            Ok(Transition::Terminal(SignTerminalStates::Failed))
+                        }
+                    }
                 } else {
                     Ok(Transition::Same)
                 }
