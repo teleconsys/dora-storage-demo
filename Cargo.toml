@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 actix-web = "4"
-kyber-rs = { path = "../kyber-rs" }
+kyber-rs = "0.1.0-alpha"
 anyhow = "1.0.68"
 thiserror = "1.0.38"
 log = "0.4.17"

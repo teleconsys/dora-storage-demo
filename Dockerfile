@@ -7,11 +7,9 @@ RUN update-ca-certificates
 RUN mkdir /scratch
 WORKDIR /scratch
 RUN mkdir /dora-storage
-RUN mkdir /kyber-rs
 
 # Copy everything from the current directory to the PWD(Present Working Directory) inside the container
-COPY dora-storage/. dora-storage/.
-COPY kyber-rs/. kyber-rs/.
+COPY . dora-storage/.
 WORKDIR /scratch/dora-storage
 
 RUN cargo build --release
