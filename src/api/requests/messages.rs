@@ -2,18 +2,12 @@ use core::fmt;
 use std::str::FromStr;
 
 use enum_display::EnumDisplay;
-use iota_client::bee_message::prelude::Output;
-use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
+
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use crate::demo::node::ApiNodeError;
-
-use super::{
-    get::{GetRequest, GetResponse},
-    save::StoreRequest,
-    NodeMessage,
-};
+use super::NodeMessage;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct StorageLocalUri(pub String);
@@ -44,16 +38,14 @@ impl Serialize for InputUri {
     {
         match self {
             InputUri::Iota(ref iota) => match iota {
-                IotaMessageUri(index) => {
-                    serializer.serialize_str(&format!("iota:message:{}", index))
-                }
+                IotaMessageUri(index) => serializer.serialize_str(&format!("iota:message:{index}")),
             },
             InputUri::Local(ref local) => match local {
                 StorageLocalUri(index) => {
-                    serializer.serialize_str(&format!("storage:local:{}", index))
+                    serializer.serialize_str(&format!("storage:local:{index}"))
                 }
             },
-            InputUri::Literal(s) => serializer.serialize_str(&format!("literal:string:{}", s)),
+            InputUri::Literal(s) => serializer.serialize_str(&format!("literal:string:{s}")),
             InputUri::Url(u) => serializer.serialize_str(u.as_str()),
         }
     }
@@ -66,11 +58,11 @@ impl Serialize for OutputUri {
     {
         match self {
             OutputUri::Iota(ref iota) => match iota {
-                IotaIndexUri(index) => serializer.serialize_str(&format!("iota:index:{}", index)),
+                IotaIndexUri(index) => serializer.serialize_str(&format!("iota:index:{index}")),
             },
             OutputUri::Storage(ref local) => match local {
                 StorageLocalUri(index) => {
-                    serializer.serialize_str(&format!("storage:local:{}", index))
+                    serializer.serialize_str(&format!("storage:local:{index}"))
                 }
             },
             OutputUri::None => serializer.serialize_str("none"),
@@ -86,7 +78,7 @@ impl Serialize for StorageUri {
         match self {
             StorageUri::Storage(ref local) => match local {
                 StorageLocalUri(index) => {
-                    serializer.serialize_str(&format!("storage:local:{}", index))
+                    serializer.serialize_str(&format!("storage:local:{index}"))
                 }
             },
             StorageUri::None => serializer.serialize_str("none"),
@@ -272,7 +264,7 @@ impl FromStr for InputUri {
     }
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub enum OutputUri {
     None,
     Iota(IotaIndexUri),
@@ -297,7 +289,7 @@ impl Default for StorageUri {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub enum Execution {
     None,
 }
@@ -308,23 +300,29 @@ impl Default for Execution {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct RequestId(pub String);
 
 #[derive(Serialize, Deserialize)]
 pub struct Signature(pub Vec<u8>);
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum ResponseState {
     Success,
     Failure,
+}
+
+impl Default for ResponseState {
+    fn default() -> Self {
+        ResponseState::Failure
+    }
 }
 
 fn default_signature_flag() -> bool {
     false
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct GenericRequest {
     #[serde(deserialize_with = "deserialize_input_uri")]
     pub input_uri: InputUri,
@@ -340,56 +338,20 @@ pub struct GenericRequest {
     pub storage_uri: StorageUri,
 }
 
-#[test]
-fn test_generic_get_request() {
-    let request_json = r#"{ "input_uri": "storage:local:asdf", "output": "iota:index:asdf", "execution": "None", "storage_uri": "none" }"#;
-    let request: GenericRequest =
-        serde_json::from_str(request_json).expect("could not deserialize into generic request");
-    assert_eq!(request.execution, Execution::None);
-    assert_eq!(request.storage_uri, StorageUri::None);
-    assert!(!request.signature);
-    assert_eq!(
-        request.input_uri,
-        InputUri::Local(StorageLocalUri("asdf".to_owned()))
-    );
-
-    let node_message: NodeMessage = request
-        .try_into()
-        .expect("could not convert generic request into a specific one");
-
-    assert!(matches!(
-        node_message,
-        NodeMessage::GetRequest(GetRequest { input }) if input == InputUri::Local(StorageLocalUri("asdf".to_owned()))
-    ))
+#[derive(Error, Debug, EnumDisplay)]
+pub enum GenericRequestParseError {
+    NotAValidRequest,
 }
 
-#[test]
-fn test_generic_store_request() {
-    let request_json = r#"{ "input_uri": "iota:message:asdf", "storage_uri": "storage:local:asdf", "output": "" }"#;
-    let request: GenericRequest =
-        serde_json::from_str(request_json).expect("could not deserialize into generic request");
-    assert_eq!(request.execution, Execution::None);
-    assert_eq!(
-        request.storage_uri,
-        StorageUri::Storage(StorageLocalUri("asdf".to_owned()))
-    );
-    assert!(!request.signature);
-    assert_eq!(
-        request.input_uri,
-        InputUri::Iota(IotaMessageUri("asdf".to_owned()))
-    );
+impl TryInto<NodeMessage> for GenericRequest {
+    type Error = GenericRequestParseError;
 
-    let node_message: NodeMessage = request
-        .try_into()
-        .expect("could not convert generic request into a specific one");
-
-    assert!(matches!(
-        node_message,
-        NodeMessage::StoreRequest(StoreRequest { input, storage_uri }) if input == InputUri::Iota(IotaMessageUri("asdf".to_owned()))
-    ))
+    fn try_into(self) -> Result<NodeMessage, Self::Error> {
+        Ok(NodeMessage::GenericRequest(self))
+    }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct CommitteeLog {
     pub(crate) committee_did: String,
     pub(crate) request_id: RequestId,
@@ -409,75 +371,5 @@ impl FromStr for CommitteeLog {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_json::de::from_str(s)
-    }
-}
-
-// TODO: Finish implementing
-impl TryFrom<NodeMessage> for CommitteeLog {
-    type Error = CommitteeLogParseError;
-
-    fn try_from(value: NodeMessage) -> Result<Self, Self::Error> {
-        match value {
-            NodeMessage::StoreResponse(r) => Ok(Self {
-                committee_did: "".to_owned(),
-                request_id: RequestId("".to_owned()),
-                result: ResponseState::Success,
-                signature_hex: None,
-                output_uri: None,
-                data: None,
-            }),
-            NodeMessage::GetResponse(r) => match r {
-                GetResponse::Success { data, signature } => Ok(Self {
-                    committee_did: "".to_owned(),
-                    request_id: RequestId("".to_owned()),
-                    result: ResponseState::Success,
-                    signature_hex: None,
-                    output_uri: None,
-                    data: None,
-                }),
-                GetResponse::Failure(f) => Ok(Self {
-                    committee_did: "".to_owned(),
-                    request_id: RequestId("".to_owned()),
-                    result: ResponseState::Failure,
-                    signature_hex: None,
-                    output_uri: None,
-                    data: None,
-                }),
-            },
-            NodeMessage::DeleteResponse(r) => Ok(Self {
-                committee_did: "".to_owned(),
-                request_id: RequestId("".to_owned()),
-                result: ResponseState::Success,
-                signature_hex: None,
-                output_uri: None,
-                data: None,
-            }),
-            _ => Err(CommitteeLogParseError::NotAValidResponse),
-        }
-    }
-}
-
-#[derive(Error, Debug, EnumDisplay)]
-pub enum GenericRequestParsingError {
-    RequestNotSupported,
-    LocalInputInStoreRequest,
-}
-
-impl TryInto<NodeMessage> for GenericRequest {
-    type Error = GenericRequestParsingError;
-
-    fn try_into(self) -> Result<NodeMessage, Self::Error> {
-        if let StorageUri::Storage(StorageLocalUri(..)) = self.storage_uri {
-            return Ok(NodeMessage::StoreRequest(StoreRequest {
-                input: self.input_uri,
-                storage_uri: self.storage_uri,
-            }));
-        } else {
-            return Ok(NodeMessage::GetRequest(GetRequest {
-                input: self.input_uri,
-            }));
-        }
-
-        Err(GenericRequestParsingError::RequestNotSupported)
     }
 }

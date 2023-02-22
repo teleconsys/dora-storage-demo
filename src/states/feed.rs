@@ -1,4 +1,3 @@
-use kyber_rs::group::edwards25519::Point;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
@@ -41,8 +40,9 @@ impl<T: Display + Serialize, R: Receiver<MessageWrapper<T>>> Feed<T, R> {
                 .ok_or_else(|| panic!("Popping a message from a non-empty queue must not fail"));
         }
 
-        let wrapped_message = self.receiver.recv().map_err(|e| match e {
-            RecvError => FeedError::ChannelClosed,
+        let wrapped_message = self.receiver.recv().map_err(|e| {
+            let _recv_error = e;
+            FeedError::ChannelClosed
         })?;
         if wrapped_message.session_id != self.filter_id {
             return Err(FeedError::NoNewMessages);

@@ -44,7 +44,7 @@ services:
   dora-storage-1:
     container_name: d1
     tty: true
-    image: giordyfish/test-dora-storage
+    image: giordyfish/dora-storage-demo
     stop_grace_period: 5m
     restart: always
     environment:
@@ -53,22 +53,20 @@ services:
       minio-1:
         condition: service_started
     command:
-      - "iota-node"
-      - "--governor=dora-governor-test"
-      - "--nodes-number=3"
+      - "node"
+      - "--governor=dora-governor-demo"
       - "--time-resolution=20"
       - "--signature-sleep-time=20"
       - "--storage=minio-local"
       - "--storage-endpoint=minio-1:9000"
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
-      - "--did-network=iota-main"
-      #- "--node-url=https://iota-n1.teleconsys.it/"
+      - "--network=iota-main"
 
   dora-storage-2:
     container_name: d2
     tty: true
-    image: giordyfish/test-dora-storage
+    image: giordyfish/dora-storage-demo
     stop_grace_period: 5m
     restart: always
     environment:
@@ -77,22 +75,20 @@ services:
       minio-2:
         condition: service_started
     command:
-      - "iota-node"
-      - "--governor=dora-governor-test"
-      - "--nodes-number=3"
+      - "node"
+      - "--governor=dora-governor-demo"
       - "--time-resolution=20"
       - "--signature-sleep-time=20"
       - "--storage=minio-local"
       - "--storage-endpoint=minio-2:9000"
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
-      - "--did-network=iota-main"
-      #- "--node-url=https://iota-n1.teleconsys.it/"
+      - "--network=iota-main"
 
   dora-storage-3:
     container_name: d3
     tty: true
-    image: giordyfish/test-dora-storage
+    image: giordyfish/dora-storage-demo
     stop_grace_period: 5m
     restart: always
     environment:
@@ -101,17 +97,15 @@ services:
       minio-3:
         condition: service_started
     command:
-      - "iota-node"
-      - "--governor=dora-governor-test"
-      - "--nodes-number=3"
+      - "node"
+      - "--governor=dora-governor-demo"
       - "--time-resolution=20"
       - "--signature-sleep-time=20"
       - "--storage=minio-local"
       - "--storage-endpoint=minio-3:9000"
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
-      - "--did-network=iota-main"
-      #- "--node-url=https://iota-n1.teleconsys.it/"
+      - "--network=iota-main"
 
 
 #### minio volumes

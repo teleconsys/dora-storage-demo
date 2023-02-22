@@ -20,7 +20,7 @@ pub fn new_storage(
             access_key,
             secret_key,
         )?,
-        _ => panic!("{} storage is not supported", storage),
+        _ => panic!("{storage} storage is not supported"),
     };
     Ok(storage)
 }

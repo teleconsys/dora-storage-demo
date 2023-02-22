@@ -22,6 +22,13 @@ enum WaitingState {
     Done,
 }
 
+pub struct SignatureParams {
+    pub threshold: usize,
+    pub sender: Sender<MessageWrapper<SignMessage>>,
+    pub sleep_time: u64,
+    pub suite: SuiteEd25519,
+}
+
 pub struct Initializing {
     dss: DSS<SuiteEd25519, DistKeyShare<SuiteEd25519>>,
     session_id: String,
@@ -35,26 +42,23 @@ pub struct Initializing {
 
 impl Initializing {
     pub fn new(
-        suite: SuiteEd25519,
         secret: &Scalar,
         session_id: String,
         participants: &[Point],
         dks: &DistKeyShare<SuiteEd25519>,
         msg: &[u8],
-        threshold: usize,
-        sender: Sender<MessageWrapper<SignMessage>>,
-        sleep_time: u64,
+        signature_params: SignatureParams,
     ) -> Result<Self> {
         let mut sorted_participants = participants.to_vec();
         sorted_participants.sort_by_key(|pk| pk.to_string());
         let mut dss = new_dss(
-            suite,
+            signature_params.suite,
             secret,
             &sorted_participants,
             dks,
             dks,
             msg,
-            threshold,
+            signature_params.threshold,
         )?;
         let partial_signature = dss.partial_sig()?;
         Ok(Initializing {
@@ -64,8 +68,8 @@ impl Initializing {
             processed_partial_owners: vec![],
             bad_signers: vec![],
             waiting: WaitingState::Waiting,
-            sender,
-            sleep_time,
+            sender: signature_params.sender,
+            sleep_time: signature_params.sleep_time,
         })
     }
 }
@@ -110,6 +114,7 @@ impl InitializingBuilder {
             &self.secret.ok_or(MissingField::Secret)?,
             &self.participants,
             &self.dks,
+            // THIS IS UNSAFE
             &self.dks,
             &self.message.ok_or(MissingField::Message)?,
             self.threshold,
