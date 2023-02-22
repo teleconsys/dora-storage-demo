@@ -37,7 +37,7 @@ pub fn new_document(
             )?,
             network: "dev".to_string(),
         },
-        _ => panic!("{} network is not supported", network),
+        _ => panic!("{network} network is not supported"),
     };
     Ok(document)
 }

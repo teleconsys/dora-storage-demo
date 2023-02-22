@@ -53,7 +53,7 @@ services:
       minio-1:
         condition: service_started
     command:
-      - "iota-node"
+      - "node"
       - "--governor=dora-governor-test"
       - "--nodes-number=3"
       - "--time-resolution=20"
@@ -63,7 +63,6 @@ services:
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
       - "--did-network=iota-main"
-      #- "--node-url=https://iota-n1.teleconsys.it/"
 
   dora-storage-2:
     container_name: d2
@@ -77,7 +76,7 @@ services:
       minio-2:
         condition: service_started
     command:
-      - "iota-node"
+      - "node"
       - "--governor=dora-governor-test"
       - "--nodes-number=3"
       - "--time-resolution=20"
@@ -87,7 +86,6 @@ services:
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
       - "--did-network=iota-main"
-      #- "--node-url=https://iota-n1.teleconsys.it/"
 
   dora-storage-3:
     container_name: d3
@@ -101,7 +99,7 @@ services:
       minio-3:
         condition: service_started
     command:
-      - "iota-node"
+      - "node"
       - "--governor=dora-governor-test"
       - "--nodes-number=3"
       - "--time-resolution=20"
@@ -111,7 +109,6 @@ services:
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
       - "--did-network=iota-main"
-      #- "--node-url=https://iota-n1.teleconsys.it/"
 
 
 #### minio volumes

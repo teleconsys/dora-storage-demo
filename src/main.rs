@@ -5,45 +5,32 @@ mod api;
 mod demo;
 mod did;
 mod dlt;
+mod logging;
 mod net;
 mod states;
 mod store;
 
-use std::{
-    net::SocketAddr,
-    str::FromStr,
-    sync::{atomic::AtomicBool, Arc, Mutex},
-    thread,
-};
+use std::str::FromStr;
 
-use actix_web::{App, HttpServer};
 use anyhow::{bail, Result};
 
-use api::routes::{request::CommitteeLog, AppData};
+use api::requests::messages::CommitteeLog;
 
 use clap::Parser;
-use demo::{
-    node::NodeSignatureLog,
-    run::{run_node, NodeArgs},
-    run_iota::{self, IotaNodeArgs},
-};
+use demo::run::{run_node, NodeArgs};
 
 use did::resolve_document;
-use dlt::iota::{Publisher};
-use identity_iota::{
-    core::ToJson,
-    iota_core::{Network},
-};
+use dlt::iota::Publisher;
+use identity_iota::{core::ToJson, iota_core::Network};
 use kyber_rs::sign::eddsa;
+use logging::NodeSignatureLog;
 use net::host::Host;
 
 use states::dkg;
 
-use crate::api::routes::{
-    request::{
-        Execution, InputUri, IotaMessageUri, OutputUri, StorageLocalUri, StorageUri,
-    },
-    GenericRequest, NodeMessage,
+use crate::api::requests::{
+    messages::{Execution, InputUri, OutputUri, StorageLocalUri, StorageUri},
+    GenericRequest,
 };
 
 #[derive(Parser)]
@@ -65,9 +52,6 @@ struct Args {
 #[derive(clap::Subcommand)]
 enum Action {
     Node(NodeArgs),
-    Api(ApiArgs),
-    IotaNode(IotaNodeArgs),
-    ApiSend(ApiSendArgs),
     Request(RequestArgs),
     Send(SendArgs),
     NewCommittee(NewCommitteeArgs),
@@ -126,65 +110,12 @@ struct NewCommitteeArgs {
     nodes: Option<String>,
 }
 
-#[derive(Parser)]
-struct ApiSendArgs {
-    #[arg(required = true, long, help = "action")]
-    action: ApiAction,
-
-    #[arg(long, help = "message id", default_value = "")]
-    message_id: String,
-
-    #[arg(default_value = "", long, help = "input uri")]
-    input_uri: String,
-
-    #[arg(long, help = "storage id", default_value = None)]
-    storage_id: Option<String>,
-
-    #[arg(
-        long = "committee-index",
-        default_value = "dora-governor-test",
-        long,
-        help = "index"
-    )]
-    committee_index: String,
-
-    #[arg(long, help = "node DIDs")]
-    nodes: Option<String>,
-}
-
-#[derive(Clone)]
-enum ApiAction {
-    Store,
-    Get,
-    Delete,
-    GenericGet,
-    GenericStore,
-}
-
-impl FromStr for ApiAction {
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "store" => Ok(ApiAction::Store),
-            "get" => Ok(ApiAction::Get),
-            "delete" => Ok(ApiAction::Delete),
-            "generic-get" => Ok(ApiAction::GenericGet),
-            "generic-store" => Ok(ApiAction::GenericStore),
-            _ => Err("not a valid action".to_owned()),
-        }
-    }
-
-    type Err = String;
-}
-
 fn main() -> Result<()> {
     pretty_env_logger::init();
     let args = Args::parse();
 
     match args.action {
         Action::Node(args) => run_node(args)?,
-        Action::Api(args) => run_api(args)?,
-        Action::IotaNode(args) => run_iota::run_node(args)?,
-        Action::ApiSend(args) => api_send(args)?,
         Action::Request(args) => send_request(args)?,
         Action::NewCommittee(args) => new_committee(args)?,
         Action::Verify(args) => verify(args)?,
@@ -192,95 +123,6 @@ fn main() -> Result<()> {
         Action::Send(args) => send_message(args)?,
     }
 
-    Ok(())
-}
-
-fn run_api(args: ApiArgs) -> Result<()> {
-    let is_finished = Arc::new(AtomicBool::new(false));
-
-    // let (inbound_sender, inbound_receiver) = std::sync::mpsc::channel();
-    let (inbound_sender, _) = tokio::sync::broadcast::channel(1024);
-    let (outbound_sender, outbound_receiver) = tokio::sync::broadcast::channel(1024);
-
-    let peers = args.nodes.into_iter().map(|h| h.into()).collect();
-
-    let mut broadcast = net::relay::BroadcastRelay::new(outbound_receiver, peers);
-    let listener =
-        net::relay::ListenRelay::new(args.host.clone(), inbound_sender.clone(), is_finished);
-
-    let broadcast_handler = thread::spawn(move || broadcast.broadcast().unwrap());
-    let listener_handler = thread::spawn(move || listener.listen().unwrap());
-
-    let is = Arc::new(inbound_sender);
-
-    let sr = actix_web::rt::System::new();
-    sr.block_on(
-        HttpServer::new(move || {
-            let app_data = actix_web::web::Data::new(AppData {
-                nodes_sender: outbound_sender.clone(),
-                nodes_receiver: Mutex::new(is.subscribe()),
-            });
-            App::new()
-                .service(api::routes::save::save)
-                .app_data(app_data)
-        })
-        .bind(SocketAddr::from(args.host.with_port(8080)))?
-        .run(),
-    )?;
-
-    broadcast_handler.join().unwrap();
-    listener_handler.join().unwrap();
-
-    Ok(())
-}
-
-fn api_send(args: ApiSendArgs) -> Result<()> {
-    let request = match args.action {
-        ApiAction::Store => {
-            let message_id = args.message_id.clone();
-            let request = NodeMessage::StoreRequest(api::routes::save::StoreRequest {
-                input: InputUri::Iota(IotaMessageUri(args.message_id.clone())),
-                storage_uri: StorageUri::Storage(StorageLocalUri(args.message_id)),
-            });
-            serde_json::to_vec(&request)?
-        }
-        ApiAction::Get => {
-            let request = NodeMessage::GetRequest(api::routes::get::GetRequest {
-                input: InputUri::Iota(IotaMessageUri(args.message_id)),
-            });
-            serde_json::to_vec(&request)?
-        }
-        ApiAction::Delete => {
-            let request = NodeMessage::DeleteRequest(api::routes::delete::DeleteRequest {
-                message_id: args.message_id,
-            });
-            serde_json::to_vec(&request)?
-        }
-        ApiAction::GenericGet => {
-            let request = GenericRequest {
-                input_uri: InputUri::Local(StorageLocalUri(args.message_id)),
-                output_uri: OutputUri::None,
-                execution: Execution::None,
-                signature: false,
-                storage_uri: StorageUri::None,
-            };
-            serde_json::to_vec(&request)?
-        }
-        ApiAction::GenericStore => {
-            let request = GenericRequest {
-                input_uri: InputUri::Iota(IotaMessageUri(args.message_id.clone())),
-                output_uri: OutputUri::None,
-                execution: Execution::None,
-                signature: false,
-                storage_uri: StorageUri::Storage(StorageLocalUri(args.message_id)),
-            };
-            serde_json::to_vec(&request)?
-        }
-    };
-    let publisher = Publisher::new(Network::Mainnet, None)?;
-    let rt = tokio::runtime::Runtime::new()?;
-    let result = rt.block_on(publisher.publish(&request, Some(args.committee_index)))?;
-    println!("{}", result);
     Ok(())
 }
 
@@ -347,7 +189,7 @@ fn send_request(args: RequestArgs) -> Result<()> {
     let publisher = Publisher::new(Network::Mainnet, None)?;
     let rt = tokio::runtime::Runtime::new()?;
     let result = rt.block_on(publisher.publish(&request, Some(args.committee_index)))?;
-    println!("{}", result);
+    println!("{result}");
     Ok(())
 }
 
@@ -359,16 +201,16 @@ fn new_committee(args: NewCommitteeArgs) -> Result<()> {
 
     let nodes = nodes
         .split(',')
-        .map(|d| format!("\"did:iota:{}\"", d))
+        .map(|d| format!("\"did:iota:{d}\""))
         .collect::<Vec<String>>()
         .join(",");
 
-    let request = format!("{{\"nodes\": [{}]}}", nodes).as_bytes().to_owned();
+    let request = format!("{{\"nodes\": [{nodes}]}}").as_bytes().to_owned();
 
     let publisher = Publisher::new(Network::Mainnet, None)?;
     let rt = tokio::runtime::Runtime::new()?;
     let result = rt.block_on(publisher.publish(&request, Some(args.governor_index)))?;
-    println!("{}", result);
+    println!("{result}");
     Ok(())
 }
 
@@ -378,6 +220,6 @@ fn send_message(args: SendArgs) -> Result<()> {
     let publisher = Publisher::new(Network::Mainnet, None)?;
     let rt = tokio::runtime::Runtime::new()?;
     let result = rt.block_on(publisher.publish(&message, Some(args.index)))?;
-    println!("{}", result);
+    println!("{result}");
     Ok(())
 }

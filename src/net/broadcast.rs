@@ -31,7 +31,7 @@ impl<T: Display + Clone + Send + 'static> LocalBroadcast<T> {
     pub fn start(self) -> JoinHandle<()> {
         thread::spawn(move || {
             for message in self.receiver {
-                println!("Received broadcast message: {}", message);
+                println!("Received broadcast message: {message}");
                 self.senders
                     .iter()
                     .map(|tx| tx.send(message.clone()))
