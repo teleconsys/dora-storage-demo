@@ -79,9 +79,9 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
     let keypair = new_key_pair(&suite)?;
 
     let network =
-        Network::from_str(&args.network).map_err(|e| anyhow::Error::msg("invalid network"))?;
+        Network::from_str(&args.network).map_err(|_| anyhow::Error::msg("invalid network"))?;
     let eddsa = EdDSA::from(keypair.clone());
-    log::info!("creating node's DID document");
+    log::info!("creating node's DID document on network {}", args.network);
     let document = new_document(&eddsa.public.marshal_binary()?, &network, None, None)?;
     let signature = eddsa.sign(&document.to_bytes()?)?;
 

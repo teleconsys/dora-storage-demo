@@ -97,9 +97,8 @@ struct RequestArgs {
 #[derive(Parser)]
 struct NewCommitteeArgs {
     #[arg(
-        long = "governor_index",
-        default_value = "dora-governor-test",
-        long,
+        long = "governor-index",
+        default_value = "dora-governor-demo",
         help = "index"
     )]
     governor_index: String,
