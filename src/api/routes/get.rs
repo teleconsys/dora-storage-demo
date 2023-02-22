@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
-use super::request::{GenericRequest, InputUri, IotaMessageUri};
+use super::request::{InputUri};
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetRequest {

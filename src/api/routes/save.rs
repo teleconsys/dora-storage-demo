@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::api::routes::{listen_for_message, AppData, NodeMessage};
 
 use super::{
-    request::{InputUri, IotaMessageUri, StorageUri},
+    request::{InputUri, StorageUri},
     CommunicationError,
 };
 

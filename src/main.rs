@@ -29,19 +29,19 @@ use demo::{
 };
 
 use did::resolve_document;
-use dlt::iota::{client::iota_client, resolve_did, Publisher};
+use dlt::iota::{Publisher};
 use identity_iota::{
     core::ToJson,
-    iota_core::{IotaDID, Network},
+    iota_core::{Network},
 };
 use kyber_rs::sign::eddsa;
 use net::host::Host;
-use s3::request;
+
 use states::dkg;
 
 use crate::api::routes::{
     request::{
-        Execution, InputUri, IotaIndexUri, IotaMessageUri, OutputUri, StorageLocalUri, StorageUri,
+        Execution, InputUri, IotaMessageUri, OutputUri, StorageLocalUri, StorageUri,
     },
     GenericRequest, NodeMessage,
 };

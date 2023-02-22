@@ -1,23 +1,23 @@
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug};
 use std::io::Read;
 use std::str::{FromStr, Utf8Error};
 use std::sync::mpsc::{Receiver, Sender};
 
 use crate::api::routes::delete::{DeleteRequest, DeleteResponse};
-use crate::api::routes::get::{GetError, GetRequest, GetResponse};
+use crate::api::routes::get::{GetRequest};
 use crate::api::routes::request::{
     self, CommitteeLog, InputUri, IotaMessageUri, StorageLocalUri, StorageUri,
 };
-use crate::api::routes::save::{StoreError, StoreRequest, StoreResponse};
+use crate::api::routes::save::{StoreRequest};
 use crate::api::routes::{GenericRequest, NodeMessage};
-use crate::demo::node;
+
 use crate::did::{new_document, resolve_document};
 use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates, Initializing};
 use crate::dlt::iota::{Listener, Publisher};
 use crate::net::broadcast::LocalBroadcast;
 use crate::states::dkg::InitializingIota;
 use crate::states::feed::{Feed, MessageWrapper};
-use crate::states::fsm::{StateMachine, StateMachineTypes};
+use crate::states::fsm::{StateMachine};
 use crate::store::Storage;
 use anyhow::bail;
 use colored::Colorize;
@@ -26,11 +26,11 @@ use identity_iota::core::ToJson;
 use identity_iota::iota_core::MessageId;
 use identity_iota::iota_core::Network;
 use iota_client::Client;
-use kyber_rs::encoding::{BinaryMarshaler, Marshaling, MarshallingError};
+use kyber_rs::encoding::{BinaryMarshaler};
 use kyber_rs::group::edwards25519::{Scalar, SuiteEd25519};
 use kyber_rs::share::dkg::rabin::DistKeyGenerator;
-use kyber_rs::sign::eddsa::{self, EdDSA};
-use log::info;
+use kyber_rs::sign::eddsa::{EdDSA};
+
 use serde::{Deserialize, Serialize};
 use url::Url;
 

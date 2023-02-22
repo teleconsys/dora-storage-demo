@@ -2,12 +2,10 @@ use core::fmt;
 use std::str::FromStr;
 
 use enum_display::EnumDisplay;
-use iota_client::bee_message::prelude::Output;
-use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
+
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
-
-use crate::demo::node::ApiNodeError;
 
 use super::{
     get::{GetRequest, GetResponse},
