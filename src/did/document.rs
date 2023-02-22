@@ -3,41 +3,35 @@ use kyber_rs::{encoding::BinaryUnmarshaler, group::edwards25519::Point};
 
 use anyhow::Result;
 
-use crate::dlt::iota::{create_unsigned_did, publish_did, resolve_did};
+use crate::{
+    dlt::iota::{create_unsigned_did, publish_did, resolve_did},
+    net::network::Network,
+};
 
 pub enum Document {
     IotaDocument {
         document: IotaDocument,
-        network: String,
+        network: Network,
     },
 }
 
 pub fn new_document(
     public_key_bytes: &[u8],
-    network: &str,
+    network: &Network,
     time_resolution: Option<u32>,
     committee_nodes_dids: Option<Vec<String>>,
 ) -> Result<Document> {
-    let document: Document = match network {
-        "iota-main" => Document::IotaDocument {
-            document: create_unsigned_did(
-                public_key_bytes,
-                "main".to_string(),
-                time_resolution,
-                committee_nodes_dids,
-            )?,
-            network: "main".to_string(),
-        },
-        "iota-dev" => Document::IotaDocument {
-            document: create_unsigned_did(
-                public_key_bytes,
-                "dev".to_string(),
-                time_resolution,
-                committee_nodes_dids,
-            )?,
-            network: "dev".to_string(),
-        },
-        _ => panic!("{network} network is not supported"),
+    let document = Document::IotaDocument {
+        document: create_unsigned_did(
+            public_key_bytes,
+            network
+                .clone()
+                .try_into()
+                .map_err(|_| anyhow::Error::msg("invalid iota network"))?,
+            time_resolution,
+            committee_nodes_dids,
+        )?,
+        network: network.clone(),
     };
     Ok(document)
 }
@@ -49,7 +43,7 @@ pub fn resolve_document(did_url: String, node_url: Option<String>) -> Result<Doc
             let doc = resolve_did(did_url, node_url)?;
             Document::IotaDocument {
                 document: doc.clone(),
-                network: doc.id().network_str().to_owned(),
+                network: Network::IotaNetwork(doc.id().network()?),
             }
         }
         _ => todo!(),
@@ -64,7 +58,14 @@ impl Document {
             Document::IotaDocument {
                 mut document,
                 network,
-            } => publish_did(&mut document, signature, network, node_url)?,
+            } => publish_did(
+                &mut document,
+                signature,
+                network
+                    .try_into()
+                    .map_err(|_| anyhow::Error::msg("invalid iota network"))?,
+                node_url,
+            )?,
         };
         Ok(())
     }

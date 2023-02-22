@@ -2,24 +2,24 @@ use std::str::FromStr;
 
 use anyhow::bail;
 use colored::Colorize;
-use identity_iota::{core::ToJson, iota_core::Network};
+use identity_iota::core::ToJson;
 use kyber_rs::{group::edwards25519::Point, sign::eddsa::EdDSA, util::key::Pair};
 use serde::{Deserialize, Serialize};
 
-use crate::{did::resolve_document, dlt::iota::Publisher};
+use crate::{did::resolve_document, dlt::iota::Publisher, net::network::Network};
 
 #[derive(Clone)]
 pub struct NodeSignatureLogger {
     own_did_url: String,
     committee_index: String,
-    network: String,
+    network: Network,
     keypair: Pair<Point>,
 }
 
 pub fn new_node_signature_logger(
     own_did_url: String,
     committee_did_url: String,
-    network: String,
+    network: Network,
     keypair: Pair<Point>,
 ) -> NodeSignatureLogger {
     NodeSignatureLogger {
@@ -36,12 +36,13 @@ impl NodeSignatureLogger {
         log: &mut NodeSignatureLog,
         node_url: Option<String>,
     ) -> anyhow::Result<()> {
-        let network = match self.network.as_str() {
-            "iota-main" => Network::Mainnet,
-            "iota-dev" => Network::Devnet,
-            _ => panic!("unsupported network"),
-        };
-        let publisher = Publisher::new(network, node_url)?;
+        let publisher = Publisher::new(
+            self.network
+                .clone()
+                .try_into()
+                .map_err(|_| anyhow::Error::msg("invalid iota network"))?,
+            node_url,
+        )?;
         self.sign_log(log)?;
 
         let msg_id = tokio::runtime::Runtime::new()?

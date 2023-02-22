@@ -5,13 +5,13 @@ use crate::did::new_document;
 use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates};
 use crate::dlt::iota::{Listener, Publisher};
 use crate::logging::{new_node_signature_logger, new_signature_log, NodeSignatureLogger};
+use crate::net::network::Network;
 use crate::states::dkg::InitializingIota;
 use crate::states::feed::{Feed, MessageWrapper};
 use crate::states::fsm::StateMachine;
 use crate::states::sign::{self, SignMessage, SignTerminalStates, Signature};
 use crate::store::Storage;
 
-use identity_iota::iota_core::Network;
 use kyber_rs::encoding::BinaryMarshaler;
 use kyber_rs::group::edwards25519::SuiteEd25519;
 use kyber_rs::share::dkg::rabin::DistKeyGenerator;
@@ -34,7 +34,7 @@ pub struct Node {
 }
 
 pub struct NodeNetworkParams {
-    pub network: String,
+    pub network: Network,
     pub node_url: Option<String>,
 }
 
@@ -172,18 +172,27 @@ impl Node {
         logger: NodeSignatureLogger,
         did_urls: Vec<String>,
     ) -> Result<(), anyhow::Error> {
-        let network = match self.network_params.network.as_str() {
-            "iota-main" => Network::Mainnet,
-            "iota-dev" => Network::Devnet,
-            _ => panic!("unsupported network"),
-        };
         let binding = did_url.clone();
         let api_index = binding.split(':').last().unwrap();
-        let mut api_input = Listener::new(network.clone(), self.network_params.node_url.clone())?;
-        let api_output = Publisher::new(network.clone(), self.network_params.node_url.clone())?;
+        let mut api_input = Listener::new(
+            self.network_params
+                .network
+                .clone()
+                .try_into()
+                .map_err(|_| anyhow::Error::msg("invalid iota network"))?,
+            self.network_params.node_url.clone(),
+        )?;
+        let api_output = Publisher::new(
+            self.network_params
+                .network
+                .clone()
+                .try_into()
+                .map_err(|_| anyhow::Error::msg("invalid iota network"))?,
+            self.network_params.node_url.clone(),
+        )?;
         let api_params = ApiParams {
             iota_client: crate::dlt::iota::client::iota_client(
-                network.name_str(),
+                &self.network_params.network.to_string(),
                 self.network_params.node_url.clone(),
             )?,
             dkg,

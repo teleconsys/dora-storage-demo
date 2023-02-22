@@ -21,27 +21,19 @@ use demo::run::{run_node, NodeArgs};
 
 use did::resolve_document;
 use dlt::iota::Publisher;
-use identity_iota::{core::ToJson, iota_core::Network};
+use identity_iota::core::ToJson;
 use kyber_rs::sign::eddsa;
 use logging::NodeSignatureLog;
-use net::host::Host;
 
 use states::dkg;
 
-use crate::api::requests::{
-    messages::{Execution, InputUri, OutputUri, StorageLocalUri, StorageUri},
-    GenericRequest,
+use crate::{
+    api::requests::{
+        messages::{Execution, InputUri, OutputUri, StorageLocalUri, StorageUri},
+        GenericRequest,
+    },
+    net::network::Network,
 };
-
-#[derive(Parser)]
-struct ApiArgs {
-    #[arg(required = true, value_name = "HOST:PORT", help = "nodes in committee")]
-    #[command()]
-    nodes: Vec<Host>,
-
-    #[arg(required = true, long, help = "inbound host")]
-    host: Host,
-}
 
 #[derive(Parser)]
 struct Args {
@@ -76,6 +68,9 @@ struct SendArgs {
         default_value = "dora_input_message"
     )]
     index: String,
+
+    #[arg(long = "network", default_value = "iota-main")]
+    network: String,
 }
 
 #[derive(Parser)]
@@ -94,6 +89,9 @@ struct RequestArgs {
 
     #[arg(long = "committee-index", long, help = "index")]
     committee_index: String,
+
+    #[arg(long = "network", default_value = "iota-main")]
+    network: String,
 }
 
 #[derive(Parser)]
@@ -108,6 +106,9 @@ struct NewCommitteeArgs {
 
     #[arg(long, help = "node DIDs")]
     nodes: Option<String>,
+
+    #[arg(long = "network", default_value = "iota-main")]
+    network: String,
 }
 
 fn main() -> Result<()> {
@@ -173,6 +174,8 @@ fn verify_log(args: VerifyLogArgs) -> Result<()> {
 }
 
 fn send_request(args: RequestArgs) -> Result<()> {
+    let net =
+        Network::from_str(&args.network).map_err(|_| anyhow::Error::msg("invalid network"))?;
     let mut storage_id = StorageUri::None;
     if let Some(id) = args.storage_id {
         storage_id = StorageUri::Storage(StorageLocalUri(id));
@@ -186,7 +189,11 @@ fn send_request(args: RequestArgs) -> Result<()> {
     };
     let request = serde_json::to_vec(&request)?;
 
-    let publisher = Publisher::new(Network::Mainnet, None)?;
+    let publisher = Publisher::new(
+        net.try_into()
+            .map_err(|_| anyhow::Error::msg("invalid network"))?,
+        None,
+    )?;
     let rt = tokio::runtime::Runtime::new()?;
     let result = rt.block_on(publisher.publish(&request, Some(args.committee_index)))?;
     println!("{result}");
@@ -194,20 +201,40 @@ fn send_request(args: RequestArgs) -> Result<()> {
 }
 
 fn new_committee(args: NewCommitteeArgs) -> Result<()> {
-    let nodes = match args.nodes {
+    let net =
+        Network::from_str(&args.network).map_err(|_| anyhow::Error::msg("invalid network"))?;
+    let mut nodes = match args.nodes {
         Some(n) => n,
         None => return Err(anyhow::Error::msg("Missing node dids")),
     };
 
-    let nodes = nodes
-        .split(',')
-        .map(|d| format!("\"did:iota:{d}\""))
-        .collect::<Vec<String>>()
-        .join(",");
+    if let Network::IotaNetwork(n) = net.clone() {
+        match n {
+            identity_iota::iota_core::Network::Mainnet => {
+                nodes = nodes
+                    .split(',')
+                    .map(|d| format!("\"did:iota:{d}\""))
+                    .collect::<Vec<String>>()
+                    .join(",");
+            }
+            identity_iota::iota_core::Network::Devnet => {
+                nodes = nodes
+                    .split(',')
+                    .map(|d| format!("\"did:iota:dev:{d}\""))
+                    .collect::<Vec<String>>()
+                    .join(",");
+            }
+            _ => panic!("invalid network"),
+        }
+    }
 
     let request = format!("{{\"nodes\": [{nodes}]}}").as_bytes().to_owned();
 
-    let publisher = Publisher::new(Network::Mainnet, None)?;
+    let publisher = Publisher::new(
+        net.try_into()
+            .map_err(|_| anyhow::Error::msg("invalid network"))?,
+        None,
+    )?;
     let rt = tokio::runtime::Runtime::new()?;
     let result = rt.block_on(publisher.publish(&request, Some(args.governor_index)))?;
     println!("{result}");
@@ -215,9 +242,15 @@ fn new_committee(args: NewCommitteeArgs) -> Result<()> {
 }
 
 fn send_message(args: SendArgs) -> Result<()> {
+    let net =
+        Network::from_str(&args.network).map_err(|_| anyhow::Error::msg("invalid network"))?;
     let message = args.message.as_bytes().to_owned();
 
-    let publisher = Publisher::new(Network::Mainnet, None)?;
+    let publisher = Publisher::new(
+        net.try_into()
+            .map_err(|_| anyhow::Error::msg("invalid network"))?,
+        None,
+    )?;
     let rt = tokio::runtime::Runtime::new()?;
     let result = rt.block_on(publisher.publish(&message, Some(args.index)))?;
     println!("{result}");

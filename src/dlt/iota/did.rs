@@ -4,7 +4,7 @@ use identity_iota::{
     core::{BaseEncoding, FromJson, Timestamp},
     crypto::{GetSignatureMut, Proof, ProofOptions, ProofValue, PublicKey, SetSignature},
     did::{Service, DID},
-    iota_core::{IotaDID, IotaService, IotaVerificationMethod},
+    iota_core::{IotaDID, IotaService, IotaVerificationMethod, Network},
     prelude::{IotaDocument, KeyType},
 };
 use iota_client::{
@@ -18,11 +18,11 @@ use super::client::identity_client;
 
 pub fn create_unsigned_did(
     bytes_pub_key: &[u8],
-    network_name: String,
+    network: Network,
     time_resolution: Option<u32>,
     committee_nodes_dids: Option<Vec<String>>,
 ) -> Result<IotaDocument> {
-    let did = IotaDID::new_with_network(bytes_pub_key, network_name.clone())?;
+    let did = IotaDID::new_with_network(bytes_pub_key, network.name())?;
 
     let public_key = &PublicKey::from(bytes_pub_key.to_vec());
 
@@ -53,7 +53,7 @@ pub fn create_unsigned_did(
     let address_hash = Address::Ed25519(Ed25519Address::new(result?));
 
     // Get address hrp from network type
-    let hrp_address = match network_name.as_str() {
+    let hrp_address = match network.name_str() {
         "main" => "iota",
         "dev" => "atoi",
         _ => todo!(),
@@ -92,7 +92,7 @@ pub fn create_unsigned_did(
 pub fn publish_did(
     document: &mut IotaDocument,
     signature: &[u8],
-    network_name: String,
+    network: Network,
     node_url: Option<String>,
 ) -> Result<()> {
     let sig_b58 = BaseEncoding::encode_base58(signature);
@@ -104,7 +104,7 @@ pub fn publish_did(
     // Verify signature
     document.verify_document(document)?;
 
-    let client = identity_client(&network_name, node_url)?;
+    let client = identity_client(network.name_str(), node_url)?;
     let r = tokio::runtime::Runtime::new()?;
     r.block_on(client.publish_document(document))?;
 

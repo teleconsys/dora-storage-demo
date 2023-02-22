@@ -1,12 +1,11 @@
 use std::{
+    str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc, Arc,
     },
     thread,
 };
-
-use identity_iota::iota_core::Network;
 
 use clap::Parser;
 use kyber_rs::{
@@ -19,7 +18,10 @@ use crate::{
     demo::node::{Node, NodeChannels, NodeNetworkParams, NodeProtocolParams},
     did::new_document,
     dlt::iota::Listener,
-    net::relay::{IotaBroadcastRelay, IotaListenRelay},
+    net::{
+        network::Network,
+        relay::{IotaBroadcastRelay, IotaListenRelay},
+    },
     store::new_storage,
 };
 use anyhow::Result;
@@ -47,11 +49,8 @@ pub struct NodeArgs {
     #[arg(long = "node-url", default_value = None)]
     node_url: Option<String>,
 
-    #[arg(long = "did-network", default_value = "iota-dev")]
-    did_network: String,
-
-    #[arg(short, long = "nodes-number", default_value = "3")]
-    nodes_number: usize,
+    #[arg(long = "network", default_value = "iota-main")]
+    network: String,
 
     #[arg(short, long = "time-resolution", default_value = "20")]
     time_resolution: usize,
@@ -79,7 +78,8 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
     let suite = SuiteEd25519::new_blake3_sha256_ed25519();
     let keypair = new_key_pair(&suite)?;
 
-    let network = args.did_network.clone();
+    let network =
+        Network::from_str(&args.network).map_err(|e| anyhow::Error::msg("invalid network"))?;
     let eddsa = EdDSA::from(keypair.clone());
     log::info!("creating node's DID document");
     let document = new_document(&eddsa.public.marshal_binary()?, &network, None, None)?;
@@ -118,13 +118,13 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
         dkg_input_channel_sender,
         is_completed.clone(),
         peers_indexes.clone(),
-        args.did_network.clone(),
+        args.network.clone(),
         args.node_url.clone(),
     );
     let mut dkg_broadcast_relay = IotaBroadcastRelay::new(
         own_idx.clone(),
         dkg_output_channel_receiver,
-        args.did_network.clone(),
+        args.network.clone(),
         args.node_url.clone(),
     )?;
 
@@ -138,13 +138,13 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
         sign_input_channel_sender.clone(),
         is_completed.clone(),
         peers_indexes,
-        args.did_network.clone(),
+        args.network.clone(),
         args.node_url.clone(),
     );
     let mut sign_broadcast_relay = IotaBroadcastRelay::new(
         own_idx,
         sign_input_channel_receiver,
-        args.did_network.clone(),
+        args.network.clone(),
         args.node_url.clone(),
     )?;
 
@@ -176,7 +176,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
     let protocol_params = NodeProtocolParams {
         own_did_url: did_url,
         did_urls: peers_dids,
-        num_participants: args.nodes_number,
+        num_participants: all_dids.len(),
         time_resolution: args.time_resolution,
         signature_sleep_time: args.signature_sleep_time,
     };
@@ -203,34 +203,34 @@ struct DkgInit {
 fn listen_governor_instructions(
     governor_index: String,
     own_did: String,
-    network: String,
+    network: Network,
     node_url: Option<String>,
 ) -> Result<Vec<String>> {
-    let net = match network.as_str() {
-        "iota-main" => Network::Mainnet,
-        "iota-dev" => Network::Devnet,
-        _ => panic!("unsupported network"),
-    };
-    let mut init_listener = Listener::new(net, node_url)?;
-    log::info!(
-        "listening for instructions on governor index: {}",
-        governor_index
-    );
-    let receiver = tokio::runtime::Runtime::new()?.block_on(init_listener.start(governor_index))?;
-    loop {
-        if let Some(data) = receiver.iter().next() {
-            let mut deserializer = serde_json::Deserializer::from_slice(&data.0);
-            if let Ok(message) = DkgInit::deserialize(&mut deserializer) {
-                for node in message.nodes.iter() {
-                    if own_did == *node {
-                        log::info!(
-                            "requested DKG from governor, committe's nodes: {:?}",
-                            message.nodes
-                        );
-                        return Ok(message.nodes);
+    if let Network::IotaNetwork(net) = network {
+        let mut init_listener = Listener::new(net, node_url)?;
+        log::info!(
+            "listening for instructions on governor index: {}",
+            governor_index
+        );
+        let receiver =
+            tokio::runtime::Runtime::new()?.block_on(init_listener.start(governor_index))?;
+        loop {
+            if let Some(data) = receiver.iter().next() {
+                let mut deserializer = serde_json::Deserializer::from_slice(&data.0);
+                if let Ok(message) = DkgInit::deserialize(&mut deserializer) {
+                    for node in message.nodes.iter() {
+                        if own_did == *node {
+                            log::info!(
+                                "requested DKG from governor, committe's nodes: {:?}",
+                                message.nodes
+                            );
+                            return Ok(message.nodes);
+                        }
                     }
                 }
             }
         }
+    } else {
+        panic!("{network:?} network is not supported")
     }
 }
