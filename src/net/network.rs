@@ -1,8 +1,9 @@
 use std::str::FromStr;
 
 use identity_iota::iota_core::Network as IotaNetwork;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Network {
     IotaNetwork(IotaNetwork),
 }

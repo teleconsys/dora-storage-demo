@@ -2,12 +2,14 @@ use identity_iota::{core::ToJson, prelude::IotaDocument};
 use kyber_rs::{encoding::BinaryUnmarshaler, group::edwards25519::Point};
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     dlt::iota::{create_unsigned_did, publish_did, resolve_did},
     net::network::Network,
 };
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Document {
     IotaDocument {
         document: IotaDocument,
