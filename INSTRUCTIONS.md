@@ -1,5 +1,8 @@
 dOra storage demo INSTRUCTIONS
 ====================================
+
+This demo will set up `nodes` able to instantiate a `committee` with the support of a `governor`. The whole system is based on communication between parties achieved through IOTA messages' indexes. The `governor` is identified through a special, customizable index, while every other entity possess a DID document. These entities use each other DID index as the endpoint for peer-to-peer communication.
+
 STEP 1 - Nodes deployment
 ----------------
 
@@ -38,7 +41,14 @@ When the nodes are ready to move forward they will print a message which states 
 STEP 2 - Committee creation
 ----------------
 
-After the first step you are expected to have up and running some nodes (we suggest 3-5 for this demo). Each node will have generated its own DID, which is printed as an output log on the terminal. You can use the `governor` index to group these nodes together in a committee.
+After the first step you are expected to have up and running some nodes (we suggest 3-5 for this demo). Each node will have generated its own DID, which is printed as an output log on the terminal. 
+
+```
+INFO  dora_storage::demo::run > node's DID document has been published: did:iota:7FAaGHygmofMqNV3T2YyTT742wzrTjZDBnBTQtJm7YJc
+INFO  dora_storage::demo::run > listening for instructions on governor index: dora-governor-demo
+```
+
+You can use the `governor` index to group these nodes together in a committee.
 
 You will have some nodes DIDs in the form:
 
@@ -62,6 +72,13 @@ In this command, you can omit the `network` argument (which is defaulted to `iot
 
 As soon as the message is received by all the nodes, the DKG will start, and it will be running for a while (a couple of minutes in our tests). You will know this phase is over when the committee generates a committee's DID document and publishes it on the Tangle.
 
+Log example:
+
+```
+INFO  dora_storage::demo::node   > committee's DID has been published
+INFO  dora_storage::demo::node   > listening for committee requests on index: 37Vj1zuZSMwh73nxsxGg7ZSiz4ecoe4MKuhJGH98HF11
+```
+
 From now on they will listen to the committee's DID index for requests. The request is a generic set of instructions that will be fully functional when we release the final dOra software. For this demo, the expected behavior is to publish data to the Tangle from a given source and to store data from sources that can be later retrieved. 
 
 STEP 3 - Sending requests
@@ -81,6 +98,19 @@ The following table offers a brief description of all the arguments that you can
 |   storage-id   |    No    |                                   if this argument is present, data from the input will be stored in the storage using the given {storage_id} as key.                                   |
 |     network    |    No    |                                                    the network to use for the request (iota-main or iota-dev, defaulted to iota-main)                                                   |
 
+As soon as the request is received the committee will start working on it. 
+Log example: 
+
+```
+INFO  dora_storage::demo::node   > received a request for the committee (msg_id: f27379c8d76f87ce52c576b1b36a8288580224d7194fffebbbaf7caac784ea3d)
+```
+
+The request will be processed up processed up until completion or failure.
+Log example:
+
+```
+INFO  dora_storage::demo::node          > request [f27379c8d7] done
+```
 
 ### Store request
 
@@ -120,6 +150,11 @@ The committee will provide 2 kinds of outputs:
 After a "get" request, the requested data can be found inside the "Committee's task log" related to the request. 
 
 These logs are published on the committee's DID index, and their message-id is found in the local execution log of the nodes. Committee's logs are signed by the committee, but only one node will carry out the publishing operation. As such, in this simple demo, you will find the "Committee's log" message id in the trace logging of the node that will effectively publish.
+
+```
+INFO  sign:f27379c8d7                   > node's signature log published (msg_id: 93ac6fb52f5d9d96e92466d67eda1841fb9ddfc90072f634c13d504a8b7e20cb)
+INFO  dora_storage::demo::node          > committee's task log for request [f27379c8d7] published (msg_id:                 169bc6ec3fd8eca4048a26e82d11bcdcf87f0a80885f0e8c9a7cc8d14ab16e84)
+```
 
 To verify the signature of Signature logs and Committee's logs you can use respectively the following commands:
 

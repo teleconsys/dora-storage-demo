@@ -1,9 +1,13 @@
 dOra a distributed oracle for DLT (storage demo)
 ====================================
 
-dOra is a distributed oracle built with the cryptographic technique of DKG and DSS, which enables the committee paradigm, used for multi-party computation. The system is capable of providing oracle functions in a distributed manner, while also providing more advanced features, such as storage or distributed processing.
+dOra is a distributed oracle built with the cryptographic techniques of DKG and DSS, which enables the committee paradigm, used for multi-party computation. The system is capable of providing oracle functions in a distributed manner, while also providing more advanced features, such as storage or distributed processing.
 
-This demo is proposed as a proof of concept of the oracular and storage functionality.  
+This demo is proposed as a proof of concept of the oracular and storage functionality.
+
+Every node and the committee itself uses the DID standard for identification and communication purposes. This demo is currently using the IOTA Chrysalis network as a transport layer and to deploy DID Documents. **A conversion for this demo to Stardust is currently in the works, and will be released soon**.
+
+To implement DKG, DSS and other cryptographic features we use our library [kyber-rs](https://github.com/teleconsys/kyber-rs) which is Rust partial porting of the [DEDIS kyber](https://github.com/dedis/kyber) library written in Go.
 
 Distributed signature consensus
 ----------------
