@@ -66,7 +66,7 @@ impl Node {
     pub fn run(
         self,
         storage: Option<Storage>,
-    ) -> Result<(Signature, DistPublicKey), anyhow::Error> {
+    ) -> Result<(), anyhow::Error> {
         let secret = self.keypair.private.clone();
         let public = self.keypair.public.clone();
 
@@ -156,11 +156,11 @@ impl Node {
             }
 
             self.run_api_node(did_url, storage, dkg, iota_logger, did_urls)?;
-            Ok((signature, dist_pub_key))
+            Ok(())
         } else {
             log::error!("could not sign committee's DID");
             self.run_api_node(did_url, storage, dkg, iota_logger, did_urls)?;
-            Ok((Signature::from(vec![]), dist_pub_key))
+            Ok(())
         }
     }
 

@@ -183,7 +183,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
 
     let node = Node::new(keypair, channels, network_params, protocol_params, id);
 
-    let (_signature, _public_key) = node.run(storage)?;
+    node.run(storage)?;
 
     is_completed.store(true, Ordering::SeqCst);
 
