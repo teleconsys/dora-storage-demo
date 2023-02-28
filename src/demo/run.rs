@@ -82,30 +82,26 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
     log::info!("generating node's keypair");
     let suite = SuiteEd25519::new_blake3_sha256_ed25519();
 
-    let mut save_data = match SaveData::load() {
-        Ok(v) => v,
-        Err(e) => {
-            log::warn!("Could not load save data: {}", e);
-            SaveData {
-                node_state: None,
-                committee_state: None,
-            }
-        }
-    };
+    let mut save_data = SaveData::load_or_create();
 
     let keypair = get_keypair(&mut save_data, suite)?;
     let network =
         Network::from_str(&args.network).map_err(|_| anyhow::Error::msg("invalid network"))?;
     let did_url = get_did_url(&keypair, &network, &args.node_url, &mut save_data)?;
 
+    log::info!("Node DID: {}", did_url);
+
     let is_completed = Arc::new(AtomicBool::new(false));
 
-    let mut all_dids = listen_governor_instructions(
-        args.governor,
-        did_url.clone(),
-        network.clone(),
-        args.node_url.clone(),
-    )?;
+    let mut all_dids = match save_data.committee_state {
+        Some(cs) => cs.did_urls,
+        None => listen_governor_instructions(
+            args.governor,
+            did_url.clone(),
+            network.clone(),
+            args.node_url.clone(),
+        )?,
+    };
 
     // get only peers dids
     let mut peers_dids = all_dids.clone();
@@ -190,9 +186,11 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
         signature_sleep_time: args.signature_sleep_time,
     };
 
-    let node = Node::new(keypair, channels, network_params, protocol_params, id);
+    let save_data = SaveData::load()?;
+    let node =
+        Node::new(keypair, channels, network_params, protocol_params, id).with_save_data(save_data);
 
-    let (_signature, _public_key) = node.run(storage)?;
+    node.run(storage)?;
 
     is_completed.store(true, Ordering::SeqCst);
 
@@ -212,16 +210,16 @@ fn get_keypair(
         Some(ref node_state) => {
             log::info!("Loaded keypair");
             Pair {
-                private: node_state.private_key.clone(),
-                public: node_state.public_key.clone(),
+                private: node_state.private_key,
+                public: node_state.public_key,
             }
         }
         None => {
             let pair = new_key_pair(&suite)?;
             log::info!("Created new keypair");
             save_data.node_state = Some(NodeState {
-                private_key: pair.private.clone(),
-                public_key: pair.public.clone(),
+                private_key: pair.private,
+                public_key: pair.public,
                 did_document: None,
             });
             pair
@@ -253,11 +251,11 @@ fn get_did_url(
                 "creating node's DID document on network {}",
                 network.to_string()
             );
-            let document = new_document(&eddsa.public.marshal_binary()?, network, None, None)?;
+            let mut document = new_document(&eddsa.public.marshal_binary()?, network, None, None)?;
             let signature = eddsa.sign(&document.to_bytes()?)?;
 
             let did_url = document.did_url();
-            document.clone().publish(&signature, node_url.clone())?;
+            document.publish(&signature, node_url.clone())?;
             log::info!("node's DID document has been published: {}", did_url);
 
             if let Some(ref mut node_state) = save_data.node_state {

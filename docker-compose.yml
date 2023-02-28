@@ -40,15 +40,17 @@ services:
       MINIO_ROOT_PASSWORD: password
     command: server --console-address ":9001" /data
 
-
   dora-storage-1:
     container_name: d1
     tty: true
     image: giordyfish/dora-storage-demo
     stop_grace_period: 5m
     restart: always
+    volumes:
+      - d1:/data
     environment:
       - RUST_LOG=fsm=trace,dora=trace,sign=trace
+      - DORA_SAVE_DIR=/data
     depends_on:
       minio-1:
         condition: service_started
@@ -69,8 +71,11 @@ services:
     image: giordyfish/dora-storage-demo
     stop_grace_period: 5m
     restart: always
+    volumes:
+      - d2:/data
     environment:
       - RUST_LOG=fsm=trace,dora=trace,sign=trace
+      - DORA_SAVE_DIR=/data
     depends_on:
       minio-2:
         condition: service_started
@@ -91,8 +96,11 @@ services:
     image: giordyfish/dora-storage-demo
     stop_grace_period: 5m
     restart: always
+    volumes:
+      - d3:/data
     environment:
       - RUST_LOG=fsm=trace,dora=trace,sign=trace
+      - DORA_SAVE_DIR=/data
     depends_on:
       minio-3:
         condition: service_started
@@ -107,10 +115,12 @@ services:
       - "--storage-secret-key=password"
       - "--network=iota-main"
 
-
 #### minio volumes
 volumes:
-  minio_storage_1: {} 
+  minio_storage_1: {}
   minio_storage_2: {}
   minio_storage_3: {}
+  d1: {}
+  d2: {}
+  d3: {}
 

@@ -1,21 +1,37 @@
 use std::fs;
 
+use identity_iota::{
+    core::ToJson,
+    crypto::ProofValue,
+    iota_core::Network,
+    prelude::{IotaDocument, KeyPair},
+};
 use kyber_rs::{
-    encoding::BinaryUnmarshaler,
-    group::edwards25519::{Point as EdPoint, Scalar as EdScalar},
+    encoding::{BinaryMarshaler, BinaryUnmarshaler},
+    group::edwards25519::{Point as EdPoint, Scalar as EdScalar, SuiteEd25519},
+    share::dkg::rabin::DistKeyGenerator,
+    util::key::new_key_pair,
     Point, Scalar,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use thiserror::Error;
 
-use crate::did::Document;
+use crate::did::{new_document, Document};
 
 pub mod node;
 pub mod run;
 
 const SAVE_FILE: &str = "node-state.json";
+const SAVE_FILE_DIR_CONFIG: &str = "DORA_SAVE_DIR";
+fn save_location() -> String {
+    match std::env::var(SAVE_FILE_DIR_CONFIG) {
+        Ok(dir) => dir + "/" + SAVE_FILE,
+        Err(_) => SAVE_FILE.to_owned(),
+    }
+}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SaveData {
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SaveData {
     node_state: Option<NodeState>,
     committee_state: Option<CommitteeState>,
 }
@@ -36,18 +52,50 @@ struct NodeState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct CommitteeState {}
+struct CommitteeState {
+    dkg: DistKeyGenerator<SuiteEd25519>,
+    dist_key: EdPoint,
+    did_urls: Vec<String>,
+    committee_did: Option<String>,
+}
+
+#[derive(Debug, Error)]
+enum SaveDataError {
+    #[error("io error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("json error: {0}")]
+    JsonError(#[from] serde_json::Error),
+}
 
 impl SaveData {
-    fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        let data = fs::read_to_string(SAVE_FILE)?;
+    fn load_or_create() -> Self {
+        match Self::load() {
+            Ok(save_data) => {
+                log::debug!("loaded save data");
+                save_data
+            }
+            Err(e) => {
+                log::debug!("could not load save data: {:?}", e);
+                let save_data = Self::default();
+                if let Err(e) = save_data.save() {
+                    log::warn!("could not save save data: {:?}", e);
+                };
+                save_data
+            }
+        }
+    }
+
+    fn load() -> Result<Self, SaveDataError> {
+        let data = fs::read_to_string(save_location())?;
         let save_data: Self = serde_json::de::from_str(&data)?;
+        log::debug!("loaded save data from: {:?}", save_location());
         Ok(save_data)
     }
 
-    fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn save(&self) -> Result<(), SaveDataError> {
         let data = serde_json::ser::to_string_pretty(self)?;
-        fs::write(SAVE_FILE, data)?;
+        fs::write(save_location(), data)?;
+        log::debug!("saved data to: {:?}", save_location());
         Ok(())
     }
 }

@@ -8,6 +8,12 @@ pub enum Network {
     IotaNetwork(IotaNetwork),
 }
 
+impl From<IotaNetwork> for Network {
+    fn from(net: IotaNetwork) -> Self {
+        Self::IotaNetwork(net)
+    }
+}
+
 impl FromStr for Network {
     type Err = NetworkError;
 

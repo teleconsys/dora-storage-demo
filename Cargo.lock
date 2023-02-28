@@ -2202,9 +2202,9 @@ dependencies = [
 
 [[package]]
 name = "kyber-rs"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0396fb5d86f87ed531f7b59b60c3880a5c7714bdc351dcf80871134ed348f47f"
+checksum = "51fd0375f558f09e89289cfe3c9c18c9b86b602a5d49b43ae8f93469a525cd4f"
 dependencies = [
  "aes-gcm 0.10.1",
  "anyhow",

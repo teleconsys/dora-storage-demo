@@ -55,15 +55,13 @@ pub fn resolve_document(did_url: String, node_url: Option<String>) -> Result<Doc
 }
 
 impl Document {
-    pub fn publish(self, signature: &[u8], node_url: Option<String>) -> Result<()> {
+    pub fn publish(&mut self, signature: &[u8], node_url: Option<String>) -> Result<()> {
         match self {
-            Document::IotaDocument {
-                mut document,
-                network,
-            } => publish_did(
-                &mut document,
+            Document::IotaDocument { document, network } => publish_did(
+                document,
                 signature,
                 network
+                    .clone()
                     .try_into()
                     .map_err(|_| anyhow::Error::msg("invalid iota network"))?,
                 node_url,
