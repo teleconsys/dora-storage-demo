@@ -6,13 +6,13 @@ use crate::did::new_document;
 use crate::dkg::{DkgMessage, DkgTerminalStates};
 use crate::dlt::iota::{Listener, Publisher};
 use crate::logging::{new_node_signature_logger, new_signature_log, NodeSignatureLogger};
-use crate::net::network::Network;
 use crate::states::dkg::InitializingIota;
 use crate::states::feed::{Feed, MessageWrapper};
 use crate::states::fsm::StateMachine;
 use crate::states::sign::{self, SignMessage, SignTerminalStates};
 use crate::store::Storage;
 
+use iota_client::Client;
 use kyber_rs::encoding::BinaryMarshaler;
 use kyber_rs::group::edwards25519::SuiteEd25519;
 use kyber_rs::share::dkg::rabin::DistKeyGenerator;
@@ -40,8 +40,7 @@ pub struct Node {
 }
 
 pub struct NodeNetworkParams {
-    pub network: Network,
-    pub node_url: Option<String>,
+    pub node_url: String,
 }
 
 pub struct NodeProtocolParams {
@@ -111,7 +110,14 @@ impl Node {
         {
             Some(did) => anyhow::Ok(did.to_owned()),
             None => Ok({
-                let did = self.create_did(dist_pub_key, &did_urls, &dkg, secret, public)?;
+                let did = self.create_did(
+                    dist_pub_key,
+                    &did_urls,
+                    &self.network_params.node_url,
+                    &dkg,
+                    secret,
+                    public,
+                )?;
                 if let Some(ref mut committee_state) = self.save_data.committee_state {
                     committee_state.committee_did = Some(did.clone())
                 }
@@ -126,8 +132,8 @@ impl Node {
         let iota_logger = new_node_signature_logger(
             self.protocol_params.own_did_url.clone(),
             did_url.clone(),
-            self.network_params.network.clone(),
             self.keypair.clone(),
+            self.network_params.node_url.clone(),
         );
         self.run_api_node(did_url, storage, dkg, iota_logger, did_urls)?;
         Ok(())
@@ -136,21 +142,24 @@ impl Node {
     fn create_did(
         &self,
         dist_pub_key: Point,
-        did_urls: &[String],
+        dids: &[String],
+        node_url: &str,
         dkg: &DistKeyGenerator<SuiteEd25519>,
         secret: kyber_rs::group::edwards25519::Scalar,
         public: Point,
     ) -> Result<String, anyhow::Error> {
         let mut document = new_document(
             &dist_pub_key.marshal_binary()?,
-            &self.network_params.network,
             Some(self.protocol_params.time_resolution as u32),
-            Some(did_urls.to_vec()),
+            Some(dids.to_vec()),
+            node_url,
+            false,
         )?;
         log::info!("committee's DID document created");
         log::info!("signing committee's DID document...");
+        todo!("IMPLEMENT DISTRIBUTED DID SIGNATURE");
         let sign_initial_state = sign::InitializingBuilder::try_from(dkg.clone())?
-            .with_message(document.to_bytes()?)
+            .with_message(vec![1, 2])
             .with_secret(secret)
             .with_sender(self.channels.sign_input_channel_sender.clone())
             .with_sleep_time(self.protocol_params.signature_sleep_time)
@@ -165,12 +174,12 @@ impl Node {
             public,
         );
         let sign_terminal_state = sign_fsm.run()?;
-        let did_url = document.did_url();
+        let did_url = document.did();
         let iota_logger = new_node_signature_logger(
             self.protocol_params.own_did_url.clone(),
             did_url.clone(),
-            self.network_params.network.clone(),
             self.keypair.clone(),
+            self.network_params.node_url,
         );
         if let SignTerminalStates::Completed(signature, processed_partial_owners, bad_signers) =
             sign_terminal_state
@@ -181,17 +190,18 @@ impl Node {
                 "dkg".to_string(),
                 processed_partial_owners,
                 bad_signers,
-                did_urls.to_vec(),
+                dids.to_vec(),
                 self.network_params.node_url.clone(),
             )?;
-            iota_logger.publish(&mut dkg_log, self.network_params.node_url.clone())?;
+            iota_logger.publish(&mut dkg_log)?;
 
             log::info!("committee's DID is: {}", did_url);
             // Publish signed DID if the node is the first on the list
             working_nodes.sort();
             if self.protocol_params.own_did_url == working_nodes[0] {
                 log::info!("publishing committee's DID...");
-                document.publish(&signature.to_vec(), self.network_params.node_url.clone())?;
+                todo!("PUBLISH DID");
+                //document.publish(&signature.to_vec(), &self.network_params.node_url)?;
                 log::info!("committee's DID has been published");
                 //let resolved_did = resolve_document(did_url.clone())?;
             }
@@ -238,27 +248,12 @@ impl Node {
     ) -> Result<(), anyhow::Error> {
         let binding = did_url.clone();
         let api_index = binding.split(':').last().unwrap();
-        let mut api_input = Listener::new(
-            self.network_params
-                .network
-                .clone()
-                .try_into()
-                .map_err(|_| anyhow::Error::msg("invalid iota network"))?,
-            self.network_params.node_url.clone(),
-        )?;
-        let api_output = Publisher::new(
-            self.network_params
-                .network
-                .clone()
-                .try_into()
-                .map_err(|_| anyhow::Error::msg("invalid iota network"))?,
-            self.network_params.node_url.clone(),
-        )?;
+        let mut api_input = Listener::new(&self.network_params.node_url)?;
+        let api_output = Publisher::new(&self.network_params.node_url)?;
         let api_params = ApiParams {
-            iota_client: crate::dlt::iota::client::iota_client(
-                &self.network_params.network.to_string(),
-                self.network_params.node_url.clone(),
-            )?,
+            client: Client::builder()
+                .with_node(&self.network_params.node_url)?
+                .finish()?,
             dkg,
             secret: self.keypair.private,
             public_key: self.keypair.public,

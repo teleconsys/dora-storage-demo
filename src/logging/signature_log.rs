@@ -6,47 +6,37 @@ use identity_iota::core::ToJson;
 use kyber_rs::{group::edwards25519::Point, sign::eddsa::EdDSA, util::key::Pair};
 use serde::{Deserialize, Serialize};
 
-use crate::{did::resolve_document, dlt::iota::Publisher, net::network::Network};
+use crate::{did::resolve_document, dlt::iota::Publisher};
 
 #[derive(Clone)]
 pub struct NodeSignatureLogger {
-    own_did_url: String,
-    committee_index: String,
-    network: Network,
+    own_did: String,
+    committee_tag: String,
     keypair: Pair<Point>,
+    node_url: String,
 }
 
 pub fn new_node_signature_logger(
-    own_did_url: String,
-    committee_did_url: String,
-    network: Network,
+    own_did: String,
+    committee_did: String,
     keypair: Pair<Point>,
+    node_url: String,
 ) -> NodeSignatureLogger {
     NodeSignatureLogger {
-        own_did_url,
-        committee_index: committee_did_url.split(':').last().unwrap().to_string(),
-        network,
+        own_did,
+        committee_tag: committee_did.split(':').last().unwrap().to_string(),
         keypair,
+        node_url,
     }
 }
 
 impl NodeSignatureLogger {
-    pub fn publish(
-        &self,
-        log: &mut NodeSignatureLog,
-        node_url: Option<String>,
-    ) -> anyhow::Result<()> {
-        let publisher = Publisher::new(
-            self.network
-                .clone()
-                .try_into()
-                .map_err(|_| anyhow::Error::msg("invalid iota network"))?,
-            node_url,
-        )?;
+    pub fn publish(&self, log: &mut NodeSignatureLog) -> anyhow::Result<()> {
+        let publisher = Publisher::new(&self.node_url)?;
         self.sign_log(log)?;
 
         let msg_id = tokio::runtime::Runtime::new()?
-            .block_on(publisher.publish(&log.to_jcs()?, Some(self.committee_index.clone())))?;
+            .block_on(publisher.publish(&log.to_jcs()?, Some(self.committee_tag.clone())))?;
         log::info!(target: &signature_log_target(&log.session_id),
             "node's signature log published (msg_id: {})", msg_id);
         Ok(())
@@ -54,7 +44,7 @@ impl NodeSignatureLogger {
 
     fn sign_log(&self, log: &mut NodeSignatureLog) -> anyhow::Result<()> {
         let eddsa = EdDSA::from(self.keypair.clone());
-        log.add_sender(&self.own_did_url);
+        log.add_sender(&self.own_did);
         log.add_signature(&eddsa.sign(&log.to_bytes()?)?);
         Ok(())
     }
@@ -74,12 +64,12 @@ pub fn new_signature_log(
     processed_partial_owners: Vec<Point>,
     bad_signers: Vec<Point>,
     did_urls: Vec<String>,
-    node_url: Option<String>,
+    node_url: String,
 ) -> anyhow::Result<(NodeSignatureLog, Vec<String>)> {
     // find out who didn't send a partial signature
     let mut processed_partial_owners_dids = vec![];
     for owner in processed_partial_owners {
-        processed_partial_owners_dids.push(public_to_did(&did_urls, owner, node_url.clone())?);
+        processed_partial_owners_dids.push(public_to_did(&did_urls, owner, &node_url)?);
     }
 
     let mut absent_nodes = did_urls.clone();
@@ -90,7 +80,7 @@ pub fn new_signature_log(
     // find out who was a bad signer
     let mut bad_signers_nodes = vec![];
     for owner in bad_signers {
-        bad_signers_nodes.push(public_to_did(&did_urls, owner, node_url.clone())?);
+        bad_signers_nodes.push(public_to_did(&did_urls, owner, &node_url)?);
     }
 
     let mut working_nodes = vec![];
@@ -144,14 +134,10 @@ pub fn signature_log_target(session_id: &str) -> String {
     )
 }
 
-pub fn public_to_did(
-    did_urls: &[String],
-    public_key: Point,
-    node_url: Option<String>,
-) -> anyhow::Result<String> {
-    for did_url in did_urls.iter() {
-        if resolve_document(did_url.to_string(), node_url.clone())?.public_key()? == public_key {
-            return Ok(did_url.to_string());
+pub fn public_to_did(dids: &[String], public_key: Point, node_url: &str) -> anyhow::Result<String> {
+    for did in dids.iter() {
+        if resolve_document(did.to_string(), node_url)?.public_key()? == public_key {
+            return Ok(did.to_string());
         }
     }
     bail!("could not find the offending DID")

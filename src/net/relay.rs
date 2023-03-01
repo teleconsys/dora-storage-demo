@@ -1,5 +1,5 @@
 use anyhow::{Error, Result};
-use identity_iota::iota_core::{MessageId, Network};
+use iota_client::block::BlockId;
 use std::{
     fmt::Display,
     io::{self, Read, Write},
@@ -84,39 +84,26 @@ impl<T: DeserializeOwned + Display, S: Sender<T>> ListenRelay<T, S> {
 pub struct IotaListenRelay<T, S: Sender<T>> {
     output: S,
     is_closed: Arc<AtomicBool>,
-    indexes: Vec<String>,
-    network: Network,
-    node_url: Option<String>,
+    tags: Vec<String>,
+    node_url: String,
     _phantom_data: PhantomData<T>,
 }
 
 impl<T: DeserializeOwned + Display, S: Sender<T> + 'static> IotaListenRelay<T, S> {
-    pub fn new(
-        output: S,
-        is_closed: Arc<AtomicBool>,
-        indexes: Vec<String>,
-        network: String,
-        node_url: Option<String>,
-    ) -> Self {
-        let net = match network.as_str() {
-            "iota-main" => Network::Mainnet,
-            "iota-dev" => Network::Devnet,
-            _ => panic!("unsupported network"),
-        };
+    pub fn new(output: S, is_closed: Arc<AtomicBool>, tags: Vec<String>, node_url: String) -> Self {
         Self {
             output,
             is_closed,
-            indexes,
+            tags,
             node_url,
             _phantom_data: PhantomData,
-            network: net,
         }
     }
 
     pub fn listen(&self) -> Result<()> {
-        let mut listener = Listener::new(self.network.clone(), self.node_url.clone())?;
-        let receivers: Vec<std::sync::mpsc::Receiver<(Vec<u8>, MessageId)>> = self
-            .indexes
+        let mut listener = Listener::new(&self.node_url)?;
+        let receivers: Vec<std::sync::mpsc::Receiver<(Vec<u8>, BlockId)>> = self
+            .tags
             .iter()
             .map(|i| tokio::runtime::Runtime::new()?.block_on(listener.start(i.to_string())))
             .collect::<Result<Vec<_>>>()?;
@@ -191,27 +178,20 @@ impl<T: Serialize, R: Receiver<T>> BroadcastRelay<T, R> {
 
 pub struct IotaBroadcastRelay<T, R: Receiver<T>> {
     input: R,
-    index: String,
+    tag: String,
     publisher: Publisher,
-    network: Network,
-    node_url: Option<String>,
+    node_url: String,
     _phantom: PhantomData<T>,
 }
 
 impl<T: Serialize, R: Receiver<T>> IotaBroadcastRelay<T, R> {
-    pub fn new(index: String, input: R, network: String, node_url: Option<String>) -> Result<Self> {
-        let net = match network.as_str() {
-            "iota-main" => Network::Mainnet,
-            "iota-dev" => Network::Devnet,
-            _ => panic!("unsupported network"),
-        };
-        let publisher = Publisher::new(net.clone(), node_url.clone())?;
+    pub fn new(tag: String, input: R, node_url: String) -> Result<Self> {
+        let publisher = Publisher::new(&node_url)?;
         Ok(IotaBroadcastRelay {
             input,
-            index,
+            tag,
             publisher,
             node_url,
-            network: net,
             _phantom: PhantomData,
         })
     }
@@ -230,11 +210,10 @@ impl<T: Serialize, R: Receiver<T>> IotaBroadcastRelay<T, R> {
             // );
             let serialized = serde_json::to_string(&message)?;
 
-            let network = self.network.clone();
-            let index = self.index.clone();
+            let tag = self.tag.clone();
             tokio::runtime::Runtime::new()
                 .unwrap()
-                .block_on(self.publisher.publish(serialized.as_bytes(), Some(index)))?;
+                .block_on(self.publisher.publish(serialized.as_bytes(), Some(tag)))?;
         }
     }
 }

@@ -1,22 +1,16 @@
 use std::fs;
 
-use identity_iota::{
-    core::ToJson,
-    crypto::ProofValue,
-    iota_core::Network,
-    prelude::{IotaDocument, KeyPair},
-};
 use kyber_rs::{
-    encoding::{BinaryMarshaler, BinaryUnmarshaler},
+    encoding::BinaryUnmarshaler,
     group::edwards25519::{Point as EdPoint, Scalar as EdScalar, SuiteEd25519},
     share::dkg::rabin::DistKeyGenerator,
-    util::key::new_key_pair,
     Point, Scalar,
 };
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
-use crate::did::{new_document, Document};
+use crate::did::Document;
 
 pub mod node;
 pub mod run;

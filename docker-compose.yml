@@ -63,7 +63,7 @@ services:
       - "--storage-endpoint=minio-1:9000"
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
-      - "--network=iota-main"
+      - "--node-url=https://api.testnet.shimmer.network"
 
   dora-storage-2:
     container_name: d2
@@ -88,7 +88,7 @@ services:
       - "--storage-endpoint=minio-2:9000"
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
-      - "--network=iota-main"
+      - "--node-url=https://api.testnet.shimmer.network"
 
   dora-storage-3:
     container_name: d3
@@ -113,7 +113,7 @@ services:
       - "--storage-endpoint=minio-3:9000"
       - "--storage-access-key=admin"
       - "--storage-secret-key=password"
-      - "--network=iota-main"
+      - "--node-url=https://api.testnet.shimmer.network"
 
 #### minio volumes
 volumes:

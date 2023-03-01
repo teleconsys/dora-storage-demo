@@ -20,7 +20,7 @@ pub struct Initializing {
     num_participants: usize,
     public_keys: Vec<Point>,
     did_urls: Vec<String>,
-    node_url: Option<String>,
+    node_url: String,
 }
 
 impl Display for Initializing {
@@ -34,7 +34,7 @@ impl Initializing {
         key: Pair<Point>,
         did_url: Option<String>,
         num_participants: usize,
-        node_url: Option<String>,
+        node_url: String,
     ) -> Initializing {
         let mut public_keys = Vec::with_capacity(num_participants);
         public_keys.push(key.public.clone());
@@ -72,7 +72,7 @@ impl State<DkgTypes> for Initializing {
             DkgMessage::DIDUrl(did_url) => {
                 self.did_urls.push(did_url.clone());
                 self.public_keys.push(
-                    resolve_document(did_url, self.node_url.clone())
+                    resolve_document(did_url, &self.node_url)
                         .unwrap()
                         .public_key()
                         .unwrap(),
