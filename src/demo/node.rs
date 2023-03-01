@@ -1,21 +1,26 @@
 use std::sync::mpsc::{Receiver, Sender};
 
 use crate::api::requests::{ApiNode, ApiParams, GenericRequest, HandlerParams};
+use crate::demo::CommitteeState;
 use crate::did::new_document;
-use crate::dkg::{DistPublicKey, DkgMessage, DkgTerminalStates};
+use crate::dkg::{DkgMessage, DkgTerminalStates};
 use crate::dlt::iota::{Listener, Publisher};
 use crate::logging::{new_node_signature_logger, new_signature_log, NodeSignatureLogger};
 use crate::net::network::Network;
 use crate::states::dkg::InitializingIota;
 use crate::states::feed::{Feed, MessageWrapper};
 use crate::states::fsm::StateMachine;
-use crate::states::sign::{self, SignMessage, SignTerminalStates, Signature};
+use crate::states::sign::{self, SignMessage, SignTerminalStates};
 use crate::store::Storage;
 
 use kyber_rs::encoding::BinaryMarshaler;
 use kyber_rs::group::edwards25519::SuiteEd25519;
 use kyber_rs::share::dkg::rabin::DistKeyGenerator;
 use kyber_rs::{group::edwards25519::Point, util::key::Pair};
+
+use super::SaveData;
+
+const DKG_ID: &str = "dkg";
 
 pub struct NodeChannels {
     pub dkg_input_channel: Receiver<MessageWrapper<DkgMessage>>,
@@ -31,6 +36,7 @@ pub struct Node {
     pub network_params: NodeNetworkParams,
     pub protocol_params: NodeProtocolParams,
     pub id: usize,
+    pub save_data: SaveData,
 }
 
 pub struct NodeNetworkParams {
@@ -60,68 +66,61 @@ impl Node {
             network_params,
             protocol_params,
             id,
+            save_data: SaveData {
+                node_state: None,
+                committee_state: None,
+            },
         }
     }
 
-    pub fn run(
-        self,
-        storage: Option<Storage>,
-    ) -> Result<(), anyhow::Error> {
-        let secret = self.keypair.private.clone();
-        let public = self.keypair.public.clone();
+    pub fn with_save_data(self, save_data: SaveData) -> Self {
+        Self { save_data, ..self }
+    }
 
-        log::info!("starting DKG...");
-        let dkg_id = "dkg";
-        let dkg_initial_state = InitializingIota::new(
-            self.keypair.clone(),
-            self.protocol_params.own_did_url.clone(),
-            self.protocol_params.did_urls.clone(),
-            self.protocol_params.num_participants,
-            self.network_params.node_url.clone(),
-        )?;
-        let mut dkg_fsm = StateMachine::new(
-            Box::new(dkg_initial_state),
-            dkg_id.to_owned(),
-            Feed::new(&self.channels.dkg_input_channel, dkg_id.to_string()),
-            &self.channels.dkg_output_channel,
-            self.id,
-            public.clone(),
-        );
-        let dkg_terminal_state = dkg_fsm.run()?;
-        let DkgTerminalStates::Completed { dkg, did_urls } = dkg_terminal_state;
-        let dist_pub_key = dkg.dist_key_share()?.public();
-        log::info!("DKG done");
+    pub fn run(mut self, storage: Option<Storage>) -> Result<(), anyhow::Error> {
+        let secret = self.keypair.private;
+        let public = self.keypair.public;
 
-        // Create unsigned DID
-        let document = new_document(
-            &dist_pub_key.marshal_binary()?,
-            &self.network_params.network,
-            Some(self.protocol_params.time_resolution as u32),
-            Some(did_urls.clone()),
-        )?;
+        let (dkg, did_urls, dist_pub_key) = match self.save_data.committee_state {
+            Some(ref committee_state) => (
+                committee_state.dkg.clone(),
+                committee_state.did_urls.clone(),
+                committee_state.dist_key,
+            ),
+            None => {
+                let (dkg, did_urls, dist_key) = self.run_dkg(&public)?;
+                self.save_data.committee_state = Some(CommitteeState {
+                    dkg: dkg.clone(),
+                    did_urls: did_urls.clone(),
+                    dist_key,
+                    committee_did: None,
+                });
+                if let Err(e) = self.save_data.save() {
+                    log::error!("Failed to save committee data: {}", e);
+                };
+                (dkg, did_urls, dist_key)
+            }
+        };
 
-        log::info!("committee's DID document created");
-        log::info!("signing committee's DID document...");
-        let sign_initial_state = sign::InitializingBuilder::try_from(dkg.clone())?
-            .with_message(document.to_bytes()?)
-            .with_secret(secret)
-            .with_sender(self.channels.sign_input_channel_sender.clone())
-            .with_sleep_time(self.protocol_params.signature_sleep_time)
-            .with_id(dkg_id.to_string())
-            .build()?;
-
-        let mut sign_fsm = StateMachine::new(
-            Box::new(sign_initial_state),
-            dkg_id.to_owned(),
-            Feed::new(&self.channels.sign_input_channel, dkg_id.to_string()),
-            &self.channels.sign_output_channel,
-            self.id,
-            public,
-        );
-
-        let sign_terminal_state = sign_fsm.run()?;
-
-        let did_url = document.did_url();
+        // Create and publish DID
+        let did_url = match self
+            .save_data
+            .committee_state
+            .as_ref()
+            .and_then(|cs| cs.committee_did.as_ref())
+        {
+            Some(did) => anyhow::Ok(did.to_owned()),
+            None => Ok({
+                let did = self.create_did(dist_pub_key, &did_urls, &dkg, secret, public)?;
+                if let Some(ref mut committee_state) = self.save_data.committee_state {
+                    committee_state.committee_did = Some(did.clone())
+                }
+                if let Err(e) = self.save_data.save() {
+                    log::warn!("Failed to save committee data: {}", e);
+                }
+                did
+            }),
+        }?;
 
         // Create a iota signature logger
         let iota_logger = new_node_signature_logger(
@@ -130,7 +129,49 @@ impl Node {
             self.network_params.network.clone(),
             self.keypair.clone(),
         );
+        self.run_api_node(did_url, storage, dkg, iota_logger, did_urls)?;
+        Ok(())
+    }
 
+    fn create_did(
+        &self,
+        dist_pub_key: Point,
+        did_urls: &[String],
+        dkg: &DistKeyGenerator<SuiteEd25519>,
+        secret: kyber_rs::group::edwards25519::Scalar,
+        public: Point,
+    ) -> Result<String, anyhow::Error> {
+        let mut document = new_document(
+            &dist_pub_key.marshal_binary()?,
+            &self.network_params.network,
+            Some(self.protocol_params.time_resolution as u32),
+            Some(did_urls.to_vec()),
+        )?;
+        log::info!("committee's DID document created");
+        log::info!("signing committee's DID document...");
+        let sign_initial_state = sign::InitializingBuilder::try_from(dkg.clone())?
+            .with_message(document.to_bytes()?)
+            .with_secret(secret)
+            .with_sender(self.channels.sign_input_channel_sender.clone())
+            .with_sleep_time(self.protocol_params.signature_sleep_time)
+            .with_id(DKG_ID.to_string())
+            .build()?;
+        let mut sign_fsm = StateMachine::new(
+            Box::new(sign_initial_state),
+            DKG_ID.to_owned(),
+            Feed::new(&self.channels.sign_input_channel, DKG_ID.to_string()),
+            &self.channels.sign_output_channel,
+            self.id,
+            public,
+        );
+        let sign_terminal_state = sign_fsm.run()?;
+        let did_url = document.did_url();
+        let iota_logger = new_node_signature_logger(
+            self.protocol_params.own_did_url.clone(),
+            did_url.clone(),
+            self.network_params.network.clone(),
+            self.keypair.clone(),
+        );
         if let SignTerminalStates::Completed(signature, processed_partial_owners, bad_signers) =
             sign_terminal_state
         {
@@ -140,7 +181,7 @@ impl Node {
                 "dkg".to_string(),
                 processed_partial_owners,
                 bad_signers,
-                did_urls.clone(),
+                did_urls.to_vec(),
                 self.network_params.node_url.clone(),
             )?;
             iota_logger.publish(&mut dkg_log, self.network_params.node_url.clone())?;
@@ -154,14 +195,37 @@ impl Node {
                 log::info!("committee's DID has been published");
                 //let resolved_did = resolve_document(did_url.clone())?;
             }
-
-            self.run_api_node(did_url, storage, dkg, iota_logger, did_urls)?;
-            Ok(())
         } else {
             log::error!("could not sign committee's DID");
-            self.run_api_node(did_url, storage, dkg, iota_logger, did_urls)?;
-            Ok(())
         }
+        Ok(did_url)
+    }
+
+    fn run_dkg(
+        &mut self,
+        public: &Point,
+    ) -> Result<(DistKeyGenerator<SuiteEd25519>, Vec<String>, Point), anyhow::Error> {
+        log::info!("starting DKG...");
+        let dkg_initial_state = InitializingIota::new(
+            self.keypair.clone(),
+            self.protocol_params.own_did_url.clone(),
+            self.protocol_params.did_urls.clone(),
+            self.protocol_params.num_participants,
+            self.network_params.node_url.clone(),
+        )?;
+        let mut dkg_fsm = StateMachine::new(
+            Box::new(dkg_initial_state),
+            DKG_ID.to_owned(),
+            Feed::new(&self.channels.dkg_input_channel, DKG_ID.to_string()),
+            &self.channels.dkg_output_channel,
+            self.id,
+            *public,
+        );
+        let dkg_terminal_state = dkg_fsm.run()?;
+        let DkgTerminalStates::Completed { dkg, did_urls } = dkg_terminal_state;
+        let dist_pub_key = dkg.dist_key_share()?.public();
+        log::info!("DKG done");
+        Ok((dkg, did_urls, dist_pub_key))
     }
 
     fn run_api_node(
@@ -196,8 +260,8 @@ impl Node {
                 self.network_params.node_url.clone(),
             )?,
             dkg,
-            secret: self.keypair.private.clone(),
-            public_key: self.keypair.public.clone(),
+            secret: self.keypair.private,
+            public_key: self.keypair.public,
             id: self.id,
             signature_sender: self.channels.sign_input_channel_sender.clone(),
             signature_sleep_time: self.protocol_params.signature_sleep_time,
