@@ -84,7 +84,7 @@ impl Document {
         Ok(())
     }
 
-    pub fn publish(&mut self, node_url: &str) -> Result<()> {
+    pub fn publish(&mut self, node_url: &str) -> Result<(String)> {
         match self {
             Document::IotaDocument {
                 document,
@@ -95,10 +95,10 @@ impl Document {
                     Some(p) => p,
                     None => return Err(anyhow::Error::msg("No payload")),
                 };
-                *document = publish_did(payload.clone(), node_url)?
+                *document = publish_did(payload.clone(), node_url)?;
+                return Ok(document.id().to_string());
             }
         };
-        Ok(())
     }
 
     pub fn did(&self) -> String {

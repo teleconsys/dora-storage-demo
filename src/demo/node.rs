@@ -1,8 +1,9 @@
 use std::sync::mpsc::{Receiver, Sender};
 
 use crate::api::requests::{ApiNode, ApiParams, GenericRequest, HandlerParams};
+use crate::demo::run::{get_address, request_faucet_funds};
 use crate::demo::CommitteeState;
-use crate::did::new_document;
+use crate::did::{new_document, resolve_document, Document};
 use crate::dkg::{DkgMessage, DkgTerminalStates};
 use crate::dlt::iota::{Listener, Publisher};
 use crate::logging::{new_node_signature_logger, new_signature_log, NodeSignatureLogger};
@@ -12,6 +13,11 @@ use crate::states::fsm::StateMachine;
 use crate::states::sign::{self, SignMessage, SignTerminalStates};
 use crate::store::Storage;
 
+use identity_iota::iota::NetworkName;
+use identity_iota::prelude::{IotaDID, IotaDocument, IotaIdentityClient};
+use iota_client::block::address::Address;
+use iota_client::block::output::AliasId;
+use iota_client::node_api::indexer::query_parameters::QueryParameter;
 use iota_client::Client;
 use kyber_rs::encoding::BinaryMarshaler;
 use kyber_rs::group::edwards25519::SuiteEd25519;
@@ -174,13 +180,8 @@ impl Node {
             public,
         );
         let sign_terminal_state = sign_fsm.run()?;
-        let did_url = document.did();
-        let iota_logger = new_node_signature_logger(
-            self.protocol_params.own_did_url.clone(),
-            did_url.clone(),
-            self.keypair.clone(),
-            self.network_params.node_url,
-        );
+        let mut did = "";
+
         if let SignTerminalStates::Completed(signature, processed_partial_owners, bad_signers) =
             sign_terminal_state
         {
@@ -193,22 +194,80 @@ impl Node {
                 dids.to_vec(),
                 self.network_params.node_url.clone(),
             )?;
-            iota_logger.publish(&mut dkg_log)?;
 
-            log::info!("committee's DID is: {}", did_url);
             // Publish signed DID if the node is the first on the list
             working_nodes.sort();
             if self.protocol_params.own_did_url == working_nodes[0] {
                 log::info!("publishing committee's DID...");
-                todo!("PUBLISH DID");
-                //document.publish(&signature.to_vec(), &self.network_params.node_url)?;
+                let c = Client::builder().with_node(node_url)?.finish()?;
+                let rt = tokio::runtime::Runtime::new()?;
+                rt.block_on(request_faucet_funds(
+                    &c,
+                    get_address(&dist_pub_key.marshal_binary()?),
+                    "https://faucet.testnet.shimmer.network/api/enqueue",
+                ))?;
+                did = &document.publish(node_url)?;
                 log::info!("committee's DID has been published");
+                log::info!("committee's DID is: {}", did);
+
                 //let resolved_did = resolve_document(did_url.clone())?;
+
+                let iota_logger = new_node_signature_logger(
+                    self.protocol_params.own_did_url.clone(),
+                    did.to_string(),
+                    self.keypair.clone(),
+                    self.network_params.node_url,
+                );
+                iota_logger.publish(&mut dkg_log)?;
+            } else {
+                let c = Client::builder().with_node(node_url)?.finish()?;
+                let rt = tokio::runtime::Runtime::new()?;
+                let mut found = false;
+                loop {
+                    rt.block_on(tokio::time::sleep(std::time::Duration::from_secs(5)));
+                    let alias_ids = rt.block_on(find_alias_ids(
+                        &c,
+                        get_address(&dist_pub_key.marshal_binary()?),
+                    ))?;
+                    for id in alias_ids {
+                        //let (_, alias) = rt.block_on(c.alias_output_id(id))?;
+                        let did_candidate = IotaDID::from_alias_id(
+                            &id.to_string(),
+                            &NetworkName::try_from(rt.block_on(c.get_network_name())?)?,
+                        );
+                        let published_doc = resolve_document(did_candidate.to_string(), node_url);
+                        match published_doc {
+                            Ok(doc) => {
+                                if doc.public_key()? == document.public_key()? {
+                                    found = true;
+                                    did = &did_candidate.to_string();
+                                    break;
+                                }
+                            }
+                            Err(_) => continue,
+                        }
+                    }
+                    if found {
+                        break;
+                    }
+                }
+                log::info!("committee's DID has been published");
+                log::info!("committee's DID is: {}", did);
+
+                //let resolved_did = resolve_document(did_url.clone())?;
+
+                let iota_logger = new_node_signature_logger(
+                    self.protocol_params.own_did_url.clone(),
+                    did.to_string(),
+                    self.keypair.clone(),
+                    self.network_params.node_url,
+                );
+                iota_logger.publish(&mut dkg_log)?;
             }
         } else {
             log::error!("could not sign committee's DID");
         }
-        Ok(did_url)
+        Ok(did.to_string())
     }
 
     fn run_dkg(
@@ -334,4 +393,24 @@ impl Node {
         }
         Ok(())
     }
+}
+
+pub async fn find_alias_ids(
+    client: &Client,
+    address: Address,
+) -> Result<Vec<AliasId>, anyhow::Error> {
+    // Get outputs from node and select inputs
+    let mut alias_ids = Vec::new();
+
+    let alias_output_ids = client
+        .alias_output_ids(vec![QueryParameter::Governor(
+            address.to_bech32(client.get_bech32_hrp().await?),
+        )])
+        .await?;
+
+    for output_id in alias_output_ids {
+        alias_ids.push(AliasId::null().or_from_output_id(&output_id))
+    }
+
+    Ok(alias_ids)
 }

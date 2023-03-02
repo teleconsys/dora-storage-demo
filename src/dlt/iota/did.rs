@@ -238,12 +238,12 @@ pub fn publish_did(did_payload: Payload, node_url: &str) -> Result<IotaDocument>
     let _ = r.block_on(client.retry_until_included(&block.id(), None, None))?;
 
     let document = IotaDocument::unpack_from_block(&r.block_on(client.network_name())?, &block)?
-    .into_iter()
-    .next()
-    .ok_or(identity_iota::iota::Error::DIDUpdateError(
-        "publish_did_output: no document found in published block",
-        None,
-    ))?;
+        .into_iter()
+        .next()
+        .ok_or(identity_iota::iota::Error::DIDUpdateError(
+            "publish_did_output: no document found in published block",
+            None,
+        ))?;
 
     Ok(document)
 }
