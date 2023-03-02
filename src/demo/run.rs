@@ -126,13 +126,13 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
     peers_dids.retain(|x| *x != did_url);
 
     // peers dids to indexes
-    let mut peers_indexes = Vec::new();
+    let mut peers_tags = Vec::new();
     for peer in peers_dids.clone() {
-        peers_indexes.push(peer.split(':').last().unwrap().to_string());
+        peers_tags.push(peer.split(':').last().unwrap()[2..].to_string());
     }
 
     // own did to indexes
-    let own_idx = did_url.split(':').last().unwrap().to_string();
+    let own_tag = did_url.split(':').last().unwrap()[2..].to_string();
 
     let (dkg_input_channel_sender, dkg_input_channel) = mpsc::channel();
     let (dkg_output_channel, dkg_output_channel_receiver) = mpsc::channel();
@@ -140,11 +140,11 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
     let dkg_listen_relay = IotaListenRelay::new(
         dkg_input_channel_sender,
         is_completed.clone(),
-        peers_indexes.clone(),
+        peers_tags.clone(),
         args.node_url.clone(),
     );
     let mut dkg_broadcast_relay = IotaBroadcastRelay::new(
-        own_idx.clone(),
+        own_tag.clone(),
         dkg_output_channel_receiver,
         args.node_url.clone(),
     )?;
@@ -158,11 +158,11 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
     let sign_listen_relay = IotaListenRelay::new(
         sign_input_channel_sender.clone(),
         is_completed.clone(),
-        peers_indexes,
+        peers_tags,
         args.node_url.clone(),
     );
     let mut sign_broadcast_relay =
-        IotaBroadcastRelay::new(own_idx, sign_input_channel_receiver, args.node_url.clone())?;
+        IotaBroadcastRelay::new(own_tag, sign_input_channel_receiver, args.node_url.clone())?;
 
     let sign_listen_relay_handle = thread::spawn(move || sign_listen_relay.listen());
     let sign_broadcast_relay_handle = thread::spawn(move || sign_broadcast_relay.broadcast());

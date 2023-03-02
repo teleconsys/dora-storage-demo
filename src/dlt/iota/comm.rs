@@ -66,7 +66,7 @@ pub struct Publisher(pub Client);
 
 impl Publisher {
     pub fn new(node_url: &str) -> Result<Self> {
-        Ok(Publisher(Client::builder().with_node(&node_url)?.finish()?))
+        Ok(Publisher(Client::builder().with_node(node_url)?.finish()?))
     }
 
     pub async fn publish(&self, data: &[u8], tag: Option<String>) -> Result<String> {
@@ -78,6 +78,7 @@ impl Publisher {
                 .with_data(data.to_vec()),
             None => self.0.block().with_data(data.to_vec()),
         };
+
         let response = client_message_builder.finish().await?;
         Ok(response.id().to_string())
     }

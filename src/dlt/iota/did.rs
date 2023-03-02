@@ -100,7 +100,6 @@ pub fn create_unsigned_did(
 
     // Construct an Alias Output containing the DID document, with the wallet address
     // set as both the state controller and governor.
-    println!("creating alias output");
     let alias_output: AliasOutput = rt.block_on(new_did_output(
         &client,
         address,

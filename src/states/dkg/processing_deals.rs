@@ -45,7 +45,7 @@ impl State<DkgTypes> for ProcessingDeals {
         self.deals
             .iter()
             .map(|(i, v)| DkgMessage::Deal {
-                destination: self.dkg.participants[*i].clone(),
+                destination: self.dkg.participants[*i],
                 deal: v.clone(),
             })
             .collect()

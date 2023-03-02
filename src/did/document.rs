@@ -50,7 +50,7 @@ pub fn resolve_document(did: String, node_url: &str) -> Result<Document> {
     let doc = resolve_did(did, node_url)?;
 
     Ok(Document::IotaDocument {
-        document: doc.clone(),
+        document: doc,
         document_transaction: None,
         document_payload: None,
         address: None,

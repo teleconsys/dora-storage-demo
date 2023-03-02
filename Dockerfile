@@ -16,6 +16,8 @@ RUN cargo build --release
 
 WORKDIR /scratch
 RUN mkdir /app
+RUN mkdir /data
+
 RUN mv dora-storage/target/release/dora-storage /app
 
 ############################
@@ -30,8 +32,11 @@ EXPOSE 8000
 
 # Copy the app dir into distroless image
 COPY --chown=nonroot:nonroot --from=build /app /app
+COPY --chown=nonroot:nonroot --from=build /data /data
 
 WORKDIR /app
+
+
 USER nonroot
 
 ENTRYPOINT ["/app/dora-storage"]

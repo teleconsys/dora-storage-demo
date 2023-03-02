@@ -180,7 +180,6 @@ pub struct IotaBroadcastRelay<T, R: Receiver<T>> {
     input: R,
     tag: String,
     publisher: Publisher,
-    node_url: String,
     _phantom: PhantomData<T>,
 }
 
@@ -191,7 +190,6 @@ impl<T: Serialize, R: Receiver<T>> IotaBroadcastRelay<T, R> {
             input,
             tag,
             publisher,
-            node_url,
             _phantom: PhantomData,
         })
     }

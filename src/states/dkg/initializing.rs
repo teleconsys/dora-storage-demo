@@ -37,7 +37,7 @@ impl Initializing {
         node_url: String,
     ) -> Initializing {
         let mut public_keys = Vec::with_capacity(num_participants);
-        public_keys.push(key.public.clone());
+        public_keys.push(key.public);
         let mut did_urls = Vec::with_capacity(num_participants);
         if let Some(url) = did_url.clone() {
             did_urls.push(url)
@@ -57,7 +57,7 @@ impl State<DkgTypes> for Initializing {
     fn initialize(&self) -> Vec<DkgMessage> {
         match &self.did_url {
             Some(url) => vec![DkgMessage::DIDUrl(url.to_string())],
-            None => vec![DkgMessage::PublicKey(self.key.public.clone())],
+            None => vec![DkgMessage::PublicKey(self.key.public)],
         }
     }
 

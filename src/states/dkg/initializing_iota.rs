@@ -36,7 +36,7 @@ impl InitializingIota {
         node_url: String,
     ) -> Result<InitializingIota> {
         let mut public_keys = Vec::with_capacity(num_participants);
-        public_keys.push(key.public.clone());
+        public_keys.push(key.public);
         for url in peers_did_urls.clone() {
             public_keys.push(resolve_document(url, &node_url)?.public_key()?);
         }
