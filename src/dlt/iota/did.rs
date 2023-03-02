@@ -1,5 +1,6 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, io::Write, str::FromStr};
 
+use actix_web::web::BufMut;
 use anyhow::Result;
 use identity_iota::{
     core::Timestamp,
@@ -33,11 +34,23 @@ use iota_client::{
     Client,
 };
 use kyber_rs::{
-    encoding::BinaryMarshaler, group::edwards25519::Point, sign::eddsa::EdDSA, util::key::Pair,
+    encoding::BinaryMarshaler,
+    group::edwards25519::Point,
+    sign::{eddsa::EdDSA, error::SignatureError},
+    util::key::Pair,
 };
 
 use identity_iota::iota::IotaIdentityClientExt;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+
+use crate::{
+    net::channel::{Receiver, Sender},
+    states::{
+        feed::{Feed, MessageWrapper},
+        fsm::StateMachine,
+        sign::{InitializingBuilder, SignMessage, SignTypes},
+    },
+};
 
 pub fn create_unsigned_did(
     bytes_pub_key: &[u8],
@@ -60,7 +73,7 @@ pub fn create_unsigned_did(
     let method: VerificationMethod = VerificationMethod::new(
         document.id().clone(),
         KeyType::Ed25519,
-        &public_key,
+        public_key,
         "#key-1",
     )?;
     document.insert_method(method, MethodScope::VerificationMethod)?;
@@ -120,9 +133,9 @@ pub fn create_unsigned_did(
 
 pub async fn sign_did(
     node_url: &str,
-    prepared_transaction_data: PreparedTransactionData,
-    key_pair: Pair<Point>,
-    committee: bool,
+    prepared_transaction_data: &PreparedTransactionData,
+    signer: &mut impl Sign,
+    public_key: &Point,
 ) -> Result<Payload, anyhow::Error> {
     let hashed_essence = prepared_transaction_data.essence.hash();
     let mut blocks = Vec::new();
@@ -165,19 +178,16 @@ pub async fn sign_did(
 
                 // Get the Ed25519 public key from the derived SLIP-10 private key in the vault.
                 //let public_key = self.ed25519_public_key(derive_location.clone()).await?;
-                let mut public_key = [0u8; 32];
-                for (i, b) in key_pair.public.clone().marshal_binary()?.iter().enumerate() {
-                    public_key[i] = *b;
+                let mut public_key_bytes = [0u8; 32];
+                for (i, b) in public_key.clone().marshal_binary()?.iter().enumerate() {
+                    public_key_bytes[i] = *b;
                 }
 
-                let signature = match committee {
-                    true => todo!(),
-                    false => EdDSA::from(key_pair.clone()).sign(&hashed_essence)?,
-                };
+                let signature = signer.sign(&hashed_essence)?;
 
                 // Convert the raw bytes into [Unlock].
                 let unlock = Unlock::Signature(SignatureUnlock::new(Signature::Ed25519(
-                    Ed25519Signature::new(public_key, signature),
+                    Ed25519Signature::new(public_key_bytes, signature),
                 )));
 
                 blocks.push(unlock);
@@ -399,4 +409,79 @@ pub async fn find_inputs(client: &Client, address: String, amount: u64) -> Resul
     Ok(selected_inputs)
 }
 
-//fn get_essence_distributed_signature() -> Result<(Vec<u8>)> {}
+pub trait Sign {
+    fn sign<T: AsRef<[u8]>>(&mut self, data: T) -> Result<[u8; 64], SignatureError>;
+}
+
+impl Sign for Pair<Point> {
+    fn sign<T: AsRef<[u8]>>(&mut self, data: T) -> Result<[u8; 64], SignatureError> {
+        EdDSA::from(self.clone()).sign(data.as_ref())
+    }
+}
+
+impl<R: Receiver<MessageWrapper<SignMessage>> + Clone, S: Sender<MessageWrapper<SignMessage>>> Sign
+    for FsmSigner<R, S>
+{
+    fn sign<T: AsRef<[u8]>>(&mut self, data: T) -> Result<[u8; 64], SignatureError> {
+        let init_state = self
+            .init_state_builder
+            .clone()
+            .with_message(data.as_ref())
+            .build()
+            .map_err(|e| SignatureError::InvalidSignature(e.to_string()))?;
+
+        let mut fsm: StateMachine<SignTypes, _, _> = StateMachine::new(
+            Box::new(init_state),
+            format!("{}#{}", self.session_id, self.round),
+            Feed::new(self.input_channel.clone(), self.session_id.to_owned()),
+            self.output_channel.clone(),
+        );
+        self.round += 1;
+
+        let result = fsm
+            .run()
+            .map_err(|e| SignatureError::InvalidSignature(e.to_string()))?;
+
+        use crate::states::sign::SignTerminalStates;
+        match result {
+            SignTerminalStates::Completed(signature, _, _) => {
+                let mut sig_bytes = [0u8; 64];
+                sig_bytes.writer().write_all(&signature.0)?;
+                Ok(sig_bytes)
+            }
+            SignTerminalStates::Failed => {
+                Err(SignatureError::InvalidSignature("fsm failed".to_owned()))
+            }
+        }
+    }
+}
+
+pub struct FsmSigner<
+    R: Receiver<MessageWrapper<SignMessage>>,
+    S: Sender<MessageWrapper<SignMessage>>,
+> {
+    init_state_builder: InitializingBuilder,
+    input_channel: R,
+    output_channel: S,
+    session_id: String,
+    round: usize,
+}
+
+impl<R: Receiver<MessageWrapper<SignMessage>>, S: Sender<MessageWrapper<SignMessage>>>
+    FsmSigner<R, S>
+{
+    pub fn new(
+        init_state_builder: InitializingBuilder,
+        input_channel: R,
+        output_channel: S,
+        session_id: String,
+    ) -> Self {
+        Self {
+            init_state_builder,
+            input_channel,
+            output_channel,
+            session_id,
+            round: 0,
+        }
+    }
+}

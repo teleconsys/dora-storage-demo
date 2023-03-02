@@ -1,12 +1,11 @@
-use std::{fmt::Display, sync::mpsc::Sender};
+use std::fmt::Display;
 
 use anyhow::Error;
 use colored::Colorize;
-use kyber_rs::group::edwards25519::Point;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    net::channel::Receiver,
+    net::channel::{Receiver, Sender},
     states::feed::{Feed, MessageWrapper},
 };
 
@@ -35,16 +34,14 @@ pub trait StateMachineTypes {
     type TerminalStates;
 }
 
-pub struct StateMachine<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> {
-    id: usize,
+pub struct StateMachine<T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>, S: Sender<MessageWrapper<T::Message>>> {
     session_id: String,
-    key: Point,
     state: BoxedState<T>,
-    message_output: &'a Sender<MessageWrapper<T::Message>>,
+    message_output: S,
     message_input: Feed<T::Message, R>,
 }
 
-impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMachine<'a, T, R> {
+impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>, S: Sender<MessageWrapper<T::Message>>> StateMachine<T, R, S> {
     fn log_target(&self) -> String {
         format!(
             "fsm:{}",
@@ -59,14 +56,10 @@ impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMac
         initial_state: BoxedState<T>,
         session_id: String,
         input_channel: F,
-        output_channel: &'a Sender<MessageWrapper<T::Message>>,
-        id: usize,
-        key: Point,
-    ) -> StateMachine<'a, T, R> {
+        output_channel: S,
+    ) -> StateMachine<T, R, S> {
         Self {
-            id,
             session_id,
-            key,
             state: initial_state,
             message_output: output_channel,
             message_input: input_channel.into(),
@@ -80,7 +73,7 @@ impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>> StateMac
                 self.message_output.send(MessageWrapper {
                     session_id: self.session_id.clone(),
                     message,
-                })?;
+                }).map_err(|e| Error::msg("could not send init state message").context(e))?;
             }
 
             self.message_input.refresh();

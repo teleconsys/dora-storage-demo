@@ -1,7 +1,6 @@
 use std::{
     io::Read,
     str::{FromStr, Utf8Error},
-    sync::mpsc::{Receiver, Sender},
 };
 
 use enum_display::EnumDisplay;
@@ -17,6 +16,7 @@ use kyber_rs::{
 
 use crate::{
     logging::{new_signature_log, signature_log_target, NodeSignatureLogger},
+    net::channel::{Receiver, Sender},
     states::{
         feed::{Feed, MessageWrapper},
         fsm::StateMachine,
@@ -37,7 +37,7 @@ pub struct ApiParams {
     pub secret: Scalar,
     pub public_key: Point,
     pub id: usize,
-    pub(crate) signature_sender: Sender<MessageWrapper<SignMessage>>,
+    pub(crate) signature_sender: std::sync::mpsc::Sender<MessageWrapper<SignMessage>>,
     pub(crate) signature_sleep_time: u64,
 }
 
@@ -57,8 +57,8 @@ impl ApiNode {
     pub fn handle_message(
         &self,
         message: NodeMessage,
-        nodes_input: &Receiver<MessageWrapper<SignMessage>>,
-        nodes_output: &Sender<MessageWrapper<SignMessage>>,
+        nodes_input: impl Receiver<MessageWrapper<SignMessage>>,
+        nodes_output: impl Sender<MessageWrapper<SignMessage>>,
         session_id: &str,
         handler_params: HandlerParams,
     ) -> Result<Option<(CommitteeLog, Vec<String>)>, ApiNodeError> {
@@ -81,8 +81,8 @@ impl ApiNode {
         &self,
         request: GenericRequest,
         session_id: &str,
-        sign_input: &Receiver<MessageWrapper<SignMessage>>,
-        sign_output: &Sender<MessageWrapper<SignMessage>>,
+        sign_input: impl Receiver<MessageWrapper<SignMessage>>,
+        sign_output: impl Sender<MessageWrapper<SignMessage>>,
         handler_params: HandlerParams,
     ) -> Result<(CommitteeLog, Vec<String>), ApiNodeError> {
         let mut committee_log = CommitteeLog {
@@ -165,8 +165,8 @@ impl ApiNode {
         &self,
         mut committee_log: CommitteeLog,
         session_id: String,
-        sign_input: &Receiver<MessageWrapper<SignMessage>>,
-        sign_output: &Sender<MessageWrapper<SignMessage>>,
+        sign_input: impl Receiver<MessageWrapper<SignMessage>>,
+        sign_output: impl Sender<MessageWrapper<SignMessage>>,
         handler_params: HandlerParams,
     ) -> Result<(CommitteeLog, Vec<String>), ApiNodeError> {
         let temp_resp_bytes = committee_log.to_jcs().unwrap();
@@ -224,13 +224,17 @@ impl ApiNode {
         Ok(data)
     }
 
-    fn get_sign_fsm<'a>(
+    fn get_sign_fsm<
+        'a,
+        R: Receiver<MessageWrapper<SignMessage>>,
+        S: Sender<MessageWrapper<SignMessage>>,
+    >(
         &self,
         message: &[u8],
         session_id: String,
-        sign_input: &'a Receiver<MessageWrapper<SignMessage>>,
-        sign_output: &'a Sender<MessageWrapper<SignMessage>>,
-    ) -> Result<Fsm<'a>, ApiNodeError> {
+        sign_input: R,
+        sign_output: S,
+    ) -> Result<Fsm<'a, R, S>, ApiNodeError> {
         let sign_initial_state = sign::InitializingBuilder::try_from(self.api_params.dkg.clone())
             .map_err(ApiNodeError::SignatureError)?
             .with_message(message.into())
@@ -246,8 +250,6 @@ impl ApiNode {
             session_id.clone(),
             Feed::new(sign_input, session_id),
             sign_output,
-            self.api_params.id,
-            self.api_params.public_key.clone(),
         );
         Ok(fsm)
     }
@@ -261,7 +263,7 @@ fn get_data_from_url(url: &Url) -> Result<Vec<u8>, ApiNodeError> {
     Ok(body)
 }
 
-type Fsm<'a> = StateMachine<'a, SignTypes, &'a Receiver<MessageWrapper<SignMessage>>>;
+type Fsm<'a, R, S> = StateMachine<SignTypes, R, S>;
 
 #[derive(Debug, EnumDisplay)]
 pub enum ApiNodeError {

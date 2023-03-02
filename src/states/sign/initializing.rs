@@ -74,6 +74,7 @@ impl Initializing {
     }
 }
 
+#[derive(Clone)]
 pub struct InitializingBuilder {
     suite: SuiteEd25519,
     session_id: Option<String>,
@@ -148,9 +149,9 @@ impl InitializingBuilder {
         }
     }
 
-    pub fn with_message(self, message: Vec<u8>) -> Self {
+    pub fn with_message(self, message: &[u8]) -> Self {
         Self {
-            message: Some(message),
+            message: Some(message.to_owned()),
             ..self
         }
     }

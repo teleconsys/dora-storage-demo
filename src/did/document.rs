@@ -9,7 +9,7 @@ use kyber_rs::{encoding::BinaryUnmarshaler, group::edwards25519::Point, util::ke
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::dlt::iota::{create_unsigned_did, publish_did, resolve_did, sign_did};
+use crate::dlt::iota::{create_unsigned_did, publish_did, resolve_did, sign_did, Sign};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Document {
@@ -59,11 +59,10 @@ pub fn resolve_document(did: String, node_url: &str) -> Result<Document> {
 }
 
 impl Document {
-    pub fn sign(&mut self, keypair: Pair<Point>, node_url: &str) -> Result<()> {
+    pub fn sign(&mut self, mut signer: impl Sign, public_key: &Point, node_url: &str) -> Result<()> {
         match self {
             Document::IotaDocument {
                 document_transaction,
-                committee,
                 document_payload,
                 ..
             } => {
@@ -74,9 +73,9 @@ impl Document {
                 let r = tokio::runtime::Runtime::new()?;
                 let payload = r.block_on(sign_did(
                     node_url,
-                    prepared_data.clone(),
-                    keypair,
-                    *committee,
+                    &prepared_data,
+                    &mut signer,
+                    public_key,
                 ))?;
                 *document_payload = Some(payload);
             }

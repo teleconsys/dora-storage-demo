@@ -7,16 +7,13 @@ use std::{
 };
 
 use clap::Parser;
-use futures::executor::block_on;
+
 use iota_client::{
     block::{
         address::{Address, Ed25519Address},
         output::Output,
     },
-    crypto::{
-        hashes::{blake2b::Blake2b256, Digest},
-        signatures::ed25519::PUBLIC_KEY_LENGTH,
-    },
+    crypto::hashes::{blake2b::Blake2b256, Digest},
     node_api::indexer::query_parameters::QueryParameter,
     Client,
 };
@@ -188,6 +185,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
         node_url: args.node_url,
     };
 
+    peers_dids.sort();
     let protocol_params = NodeProtocolParams {
         own_did_url: did_url,
         did_urls: peers_dids,
@@ -259,7 +257,7 @@ fn get_did(
             log::info!("creating node's DID document",);
             let mut document =
                 new_document(&eddsa.public.marshal_binary()?, None, None, node_url, false)?;
-            document.sign(keypair.clone(), node_url)?;
+            document.sign(keypair.clone(), &keypair.public, node_url)?;
 
             document.publish(node_url)?;
             let did = document.did();
@@ -341,7 +339,7 @@ pub async fn request_faucet_funds(
 }
 
 /// Returns the balance of the given Bech32-encoded `address`.
-async fn get_address_balance(client: &Client, address: &Address) -> anyhow::Result<u64> {
+pub async fn get_address_balance(client: &Client, address: &Address) -> anyhow::Result<u64> {
     let address_bech32 = address.to_bech32(client.get_bech32_hrp().await?);
     let output_ids = client
         .basic_output_ids(vec![
