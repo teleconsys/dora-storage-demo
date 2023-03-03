@@ -24,7 +24,7 @@ pub fn new_node_signature_logger(
 ) -> NodeSignatureLogger {
     NodeSignatureLogger {
         own_did,
-        committee_tag: committee_did.split(':').last().unwrap().to_string(),
+        committee_tag: committee_did.split(':').last().unwrap()[2..].to_string(),
         keypair,
         node_url,
     }

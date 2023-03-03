@@ -368,11 +368,11 @@ impl Node {
                     &req_id.to_string(),
                     handler_params,
                 )
-                .map_err(|e| anyhow::Error::msg(format!("{e:?}")))
+                .map_err(|e| anyhow::Error::from(e))
             {
                 Ok(r) => r,
                 Err(e) => {
-                    log::error!("could not handle request [{}]: {}", session_id, e);
+                    log::error!("could not handle request [{}]: {:?}", session_id, e);
                     continue;
                 }
             };

@@ -13,6 +13,7 @@ use kyber_rs::{
     group::edwards25519::{Point, Scalar, SuiteEd25519},
     share::dkg::rabin::DistKeyGenerator,
 };
+use thiserror::Error;
 
 use crate::{
     logging::{new_signature_log, signature_log_target, NodeSignatureLogger},
@@ -265,33 +266,30 @@ fn get_data_from_url(url: &Url) -> Result<Vec<u8>, ApiNodeError> {
 
 type Fsm<'a, R, S> = StateMachine<SignTypes, R, S>;
 
-#[derive(Debug, EnumDisplay)]
+#[derive(Debug, Error)]
 pub enum ApiNodeError {
-    AsyncRuntimeError(std::io::Error),
-    InvalidMessageId(anyhow::Error),
-    IotaError(iota_client::Error),
+    #[error("async runtime error")]
+    AsyncRuntimeError(#[from] std::io::Error),
+    #[error("message id is not valid")]
+    InvalidMessageId(#[source] anyhow::Error),
+    #[error("iota client error")]
+    IotaError(#[from] iota_client::Error),
+    #[error("missing payload {0}")]
     MissingPayload(BlockId),
+    #[error("payload is not supported")]
     UnsupportedPayload,
-    StorageError(anyhow::Error),
-    SignatureError(anyhow::Error),
-    ConversionError(Utf8Error),
-    LogError(anyhow::Error),
-    HttpError(anyhow::Error),
+    #[error("storage error")]
+    StorageError(#[source] anyhow::Error),
+    #[error("signature error")]
+    SignatureError(#[source] anyhow::Error),
+    #[error("data is not a valid utf8 string")]
+    ConversionError(#[from] Utf8Error),
+    #[error("dlt logging failed")]
+    LogError(#[source] anyhow::Error),
+    #[error("http connection error")]
+    HttpError(#[source] anyhow::Error),
 }
 
-impl std::error::Error for ApiNodeError {}
-
-impl From<std::io::Error> for ApiNodeError {
-    fn from(value: std::io::Error) -> Self {
-        Self::AsyncRuntimeError(value)
-    }
-}
-
-impl From<iota_client::Error> for ApiNodeError {
-    fn from(value: iota_client::Error) -> Self {
-        Self::IotaError(value)
-    }
-}
 
 fn manage_signature_terminal_state(
     final_state: SignTerminalStates,
