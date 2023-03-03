@@ -93,11 +93,14 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
     let keypair = get_keypair(&mut save_data, suite)?;
 
     let address = get_address(&keypair.public.marshal_binary()?);
-    let client = Client::builder().with_node(&args.node_url)?.finish()?;
-
     let rt = tokio::runtime::Runtime::new()?;
+    let client = Client::builder().with_node(&args.node_url)?.finish()?;
+    let address_str = address.to_bech32(rt.block_on(client.get_bech32_hrp())?);
+
     let balance = rt.block_on(get_address_balance(&client, &address))?;
+    log::trace!("node's address {} balance is: {}", address_str, balance);
     if balance < 10000000 {
+        log::trace!("waiting for funds on node's address {}", address_str);
         rt.block_on(request_faucet_funds(
             &client,
             address,

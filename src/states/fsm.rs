@@ -34,14 +34,23 @@ pub trait StateMachineTypes {
     type TerminalStates;
 }
 
-pub struct StateMachine<T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>, S: Sender<MessageWrapper<T::Message>>> {
+pub struct StateMachine<
+    T: StateMachineTypes,
+    R: Receiver<MessageWrapper<T::Message>>,
+    S: Sender<MessageWrapper<T::Message>>,
+> {
     session_id: String,
     state: BoxedState<T>,
     message_output: S,
     message_input: Feed<T::Message, R>,
 }
 
-impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>, S: Sender<MessageWrapper<T::Message>>> StateMachine<T, R, S> {
+impl<
+        T: StateMachineTypes,
+        R: Receiver<MessageWrapper<T::Message>>,
+        S: Sender<MessageWrapper<T::Message>>,
+    > StateMachine<T, R, S>
+{
     fn log_target(&self) -> String {
         format!(
             "fsm:{}",
@@ -70,10 +79,12 @@ impl<'a, T: StateMachineTypes, R: Receiver<MessageWrapper<T::Message>>, S: Sende
         loop {
             let messages: Vec<T::Message> = self.state.initialize();
             for message in messages {
-                self.message_output.send(MessageWrapper {
-                    session_id: self.session_id.clone(),
-                    message,
-                }).map_err(|e| Error::msg("could not send init state message").context(e))?;
+                self.message_output
+                    .send(MessageWrapper {
+                        session_id: self.session_id.clone(),
+                        message,
+                    })
+                    .map_err(|e| Error::msg("could not send init state message").context(e))?;
             }
 
             self.message_input.refresh();

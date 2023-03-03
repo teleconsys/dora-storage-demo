@@ -183,7 +183,17 @@ pub async fn sign_did(
                     public_key_bytes[i] = *b;
                 }
 
-                let signature = signer.sign(&hashed_essence)?;
+                log::debug!(
+                    "signing for unlock: {}/{}",
+                    current_block_index + 1,
+                    prepared_transaction_data.inputs_data.len()
+                );
+                let signature = signer.sign(hashed_essence)?;
+                log::debug!(
+                    "unlock {}/{} signed",
+                    current_block_index + 1,
+                    prepared_transaction_data.inputs_data.len()
+                );
 
                 // Convert the raw bytes into [Unlock].
                 let unlock = Unlock::Signature(SignatureUnlock::new(Signature::Ed25519(
@@ -427,16 +437,19 @@ impl<R: Receiver<MessageWrapper<SignMessage>> + Clone, S: Sender<MessageWrapper<
             .init_state_builder
             .clone()
             .with_message(data.as_ref())
+            .with_session_id_nonce(self.round.to_string())
             .build()
             .map_err(|e| SignatureError::InvalidSignature(e.to_string()))?;
 
+        self.round += 1;
+        let session_id = init_state.get_session_id();
+
         let mut fsm: StateMachine<SignTypes, _, _> = StateMachine::new(
             Box::new(init_state),
-            format!("{}#{}", self.session_id, self.round),
-            Feed::new(self.input_channel.clone(), self.session_id.to_owned()),
+            session_id.clone(),
+            Feed::new(self.input_channel.clone(), session_id),
             self.output_channel.clone(),
         );
-        self.round += 1;
 
         let result = fsm
             .run()
@@ -463,7 +476,6 @@ pub struct FsmSigner<
     init_state_builder: InitializingBuilder,
     input_channel: R,
     output_channel: S,
-    session_id: String,
     round: usize,
 }
 
@@ -474,13 +486,11 @@ impl<R: Receiver<MessageWrapper<SignMessage>>, S: Sender<MessageWrapper<SignMess
         init_state_builder: InitializingBuilder,
         input_channel: R,
         output_channel: S,
-        session_id: String,
     ) -> Self {
         Self {
             init_state_builder,
             input_channel,
             output_channel,
-            session_id,
             round: 0,
         }
     }

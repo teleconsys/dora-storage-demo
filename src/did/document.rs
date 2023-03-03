@@ -59,7 +59,12 @@ pub fn resolve_document(did: String, node_url: &str) -> Result<Document> {
 }
 
 impl Document {
-    pub fn sign(&mut self, mut signer: impl Sign, public_key: &Point, node_url: &str) -> Result<()> {
+    pub fn sign(
+        &mut self,
+        mut signer: impl Sign,
+        public_key: &Point,
+        node_url: &str,
+    ) -> Result<()> {
         match self {
             Document::IotaDocument {
                 document_transaction,
@@ -71,19 +76,15 @@ impl Document {
                     None => return Err(anyhow::Error::msg("No prepared transaction data")),
                 };
                 let r = tokio::runtime::Runtime::new()?;
-                let payload = r.block_on(sign_did(
-                    node_url,
-                    &prepared_data,
-                    &mut signer,
-                    public_key,
-                ))?;
+                let payload =
+                    r.block_on(sign_did(node_url, prepared_data, &mut signer, public_key))?;
                 *document_payload = Some(payload);
             }
         }
         Ok(())
     }
 
-    pub fn publish(&mut self, node_url: &str) -> Result<(String)> {
+    pub fn publish(&mut self, node_url: &str) -> Result<String> {
         match self {
             Document::IotaDocument {
                 document,

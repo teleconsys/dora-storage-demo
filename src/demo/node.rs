@@ -162,12 +162,25 @@ impl Node {
         secret: kyber_rs::group::edwards25519::Scalar,
         public: Point,
     ) -> Result<String, anyhow::Error> {
+        let mut all_dids = self.protocol_params.did_urls.clone();
+        all_dids.push(self.protocol_params.own_did_url.clone());
+        all_dids.sort();
+
         let client = Client::builder().with_node(node_url)?.finish()?;
         let rt = tokio::runtime::Runtime::new()?;
+
         let address = get_address(&dist_pub_key.marshal_binary()?);
+        let address_str = address.to_bech32(rt.block_on(client.get_bech32_hrp())?);
+
         let balance = rt.block_on(get_address_balance(&client, &address))?;
+        log::trace!(
+            "committee's address {} balance is: {}",
+            address_str,
+            balance
+        );
         if balance < 10000000 {
-            if self.protocol_params.own_did_url == self.protocol_params.did_urls[0] {
+            log::trace!("waiting for funds on committee's address {}", address_str);
+            if self.protocol_params.own_did_url == all_dids[0] {
                 rt.block_on(request_faucet_funds(
                     &client,
                     address,
@@ -206,15 +219,16 @@ impl Node {
             sign_initial_state,
             &self.channels.sign_input_channel,
             self.channels.sign_output_channel.clone(),
-            DKG_ID.to_owned(),
         );
 
+        log::debug!("signing committe's DID");
         document.sign(signer, &dist_pub_key, node_url)?;
+        log::debug!("committe's DID signed");
 
         let mut did = "".to_owned();
 
         // Publish signed DID if the node is the first on the list
-        if self.protocol_params.own_did_url == self.protocol_params.did_urls[0] {
+        if self.protocol_params.own_did_url == all_dids[0] {
             log::info!("publishing committee's DID...");
             did = document
                 .publish(node_url)
@@ -224,20 +238,26 @@ impl Node {
 
             //let resolved_did = resolve_document(did_url.clone())?;
         } else {
+            log::info!("waiting for committee's DID...");
             let c = Client::builder().with_node(node_url)?.finish()?;
             let rt = tokio::runtime::Runtime::new()?;
             let mut found = false;
             loop {
-                rt.block_on(tokio::time::sleep(std::time::Duration::from_secs(5)));
+                std::thread::sleep(std::time::Duration::from_secs(5));
                 let alias_ids = rt.block_on(find_alias_ids(
                     &c,
                     get_address(&dist_pub_key.marshal_binary()?),
                 ))?;
                 for id in alias_ids {
                     //let (_, alias) = rt.block_on(c.alias_output_id(id))?;
+                    let name_string = match rt.block_on(c.get_network_name())?.as_ref() {
+                        "shimmer" => todo!(),
+                        "testnet" => "rms",
+                        _ => return Err(anyhow::Error::msg("got unsupported network from client")),
+                    };
                     let did_candidate = IotaDID::from_alias_id(
                         &id.to_string(),
-                        &NetworkName::try_from(rt.block_on(c.get_network_name())?)?,
+                        &NetworkName::try_from(name_string)?,
                     );
                     let published_doc = resolve_document(did_candidate.to_string(), node_url);
                     match published_doc {
@@ -260,7 +280,7 @@ impl Node {
 
             //let resolved_did = resolve_document(did_url.clone())?;
         }
-        Ok(did.to_string())
+        Ok(did)
     }
 
     fn run_dkg(
@@ -297,7 +317,7 @@ impl Node {
         did_urls: Vec<String>,
     ) -> Result<(), anyhow::Error> {
         let binding = did_url.clone();
-        let api_index = binding.split(':').last().unwrap();
+        let api_index = &binding.split(':').last().unwrap()[2..];
         let mut api_input = Listener::new(&self.network_params.node_url)?;
         let api_output = Publisher::new(&self.network_params.node_url)?;
         let api_params = ApiParams {
