@@ -55,7 +55,7 @@ impl State<DkgTypes> for ProcessingResponses {
         self.responses_for_other_nodes
             .iter()
             .map(|r| DkgMessage::Response {
-                source: self.dkg.pubb.clone(),
+                source: self.dkg.pubb,
                 response: r.clone(),
             })
             .collect()

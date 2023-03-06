@@ -20,7 +20,7 @@ pub struct Initializing {
     num_participants: usize,
     public_keys: Vec<Point>,
     did_urls: Vec<String>,
-    node_url: Option<String>,
+    node_url: String,
 }
 
 impl Display for Initializing {
@@ -34,10 +34,10 @@ impl Initializing {
         key: Pair<Point>,
         did_url: Option<String>,
         num_participants: usize,
-        node_url: Option<String>,
+        node_url: String,
     ) -> Initializing {
         let mut public_keys = Vec::with_capacity(num_participants);
-        public_keys.push(key.public.clone());
+        public_keys.push(key.public);
         let mut did_urls = Vec::with_capacity(num_participants);
         if let Some(url) = did_url.clone() {
             did_urls.push(url)
@@ -57,7 +57,7 @@ impl State<DkgTypes> for Initializing {
     fn initialize(&self) -> Vec<DkgMessage> {
         match &self.did_url {
             Some(url) => vec![DkgMessage::DIDUrl(url.to_string())],
-            None => vec![DkgMessage::PublicKey(self.key.public.clone())],
+            None => vec![DkgMessage::PublicKey(self.key.public)],
         }
     }
 
@@ -72,7 +72,7 @@ impl State<DkgTypes> for Initializing {
             DkgMessage::DIDUrl(did_url) => {
                 self.did_urls.push(did_url.clone());
                 self.public_keys.push(
-                    resolve_document(did_url, self.node_url.clone())
+                    resolve_document(did_url, &self.node_url)
                         .unwrap()
                         .public_key()
                         .unwrap(),

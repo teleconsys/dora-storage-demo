@@ -1,103 +1,125 @@
-use identity_iota::{core::ToJson, prelude::IotaDocument};
+use identity_iota::{prelude::IotaDocument, verification::MethodScope};
+use iota_client::{
+    api::PreparedTransactionData,
+    block::{address::Address, payload::Payload},
+    Client,
+};
 use kyber_rs::{encoding::BinaryUnmarshaler, group::edwards25519::Point};
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
-use crate::{
-    dlt::iota::{create_unsigned_did, publish_did, resolve_did},
-    net::network::Network,
-};
+use crate::dlt::iota::{create_unsigned_did, publish_did, resolve_did, sign_did, Sign};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Document {
     IotaDocument {
+        address: Option<Address>,
         document: IotaDocument,
-        network: Network,
+        document_transaction: Option<PreparedTransactionData>,
+        document_payload: Option<Payload>,
+        committee: bool,
     },
 }
 
 pub fn new_document(
     public_key_bytes: &[u8],
-    network: &Network,
     time_resolution: Option<u32>,
     committee_nodes_dids: Option<Vec<String>>,
+    node_url: &str,
+    committee: bool,
 ) -> Result<Document> {
+    let client = Client::builder().with_node(node_url)?.finish()?;
+    let (address, document, prepared_transaction_data) = create_unsigned_did(
+        public_key_bytes,
+        client,
+        time_resolution,
+        committee_nodes_dids,
+    )?;
     let document = Document::IotaDocument {
-        document: create_unsigned_did(
-            public_key_bytes,
-            network
-                .clone()
-                .try_into()
-                .map_err(|_| anyhow::Error::msg("invalid iota network"))?,
-            time_resolution,
-            committee_nodes_dids,
-        )?,
-        network: network.clone(),
+        address: Some(address),
+        document,
+        document_transaction: Some(prepared_transaction_data),
+        document_payload: None,
+        committee,
     };
     Ok(document)
 }
 
-pub fn resolve_document(did_url: String, node_url: Option<String>) -> Result<Document> {
-    let did_network: Vec<&str> = did_url.split(':').collect();
-    let document: Document = match did_network[1] {
-        "iota" => {
-            let doc = resolve_did(did_url, node_url)?;
-            Document::IotaDocument {
-                document: doc.clone(),
-                network: Network::IotaNetwork(doc.id().network()?),
-            }
-        }
-        _ => todo!(),
-    };
+pub fn resolve_document(did: String, node_url: &str) -> Result<Document> {
+    let doc = resolve_did(did, node_url)?;
 
-    Ok(document)
+    Ok(Document::IotaDocument {
+        document: doc,
+        document_transaction: None,
+        document_payload: None,
+        address: None,
+        committee: false,
+    })
 }
 
 impl Document {
-    pub fn publish(self, signature: &[u8], node_url: Option<String>) -> Result<()> {
+    pub fn sign(
+        &mut self,
+        mut signer: impl Sign,
+        public_key: &Point,
+        node_url: &str,
+    ) -> Result<()> {
         match self {
             Document::IotaDocument {
-                mut document,
-                network,
-            } => publish_did(
-                &mut document,
-                signature,
-                network
-                    .try_into()
-                    .map_err(|_| anyhow::Error::msg("invalid iota network"))?,
-                node_url,
-            )?,
-        };
+                document_transaction,
+                document_payload,
+                ..
+            } => {
+                let prepared_data = match document_transaction {
+                    Some(d) => d,
+                    None => return Err(anyhow::Error::msg("No prepared transaction data")),
+                };
+                let r = tokio::runtime::Runtime::new()?;
+                let payload =
+                    r.block_on(sign_did(node_url, prepared_data, &mut signer, public_key))?;
+                *document_payload = Some(payload);
+            }
+        }
         Ok(())
     }
 
-    pub fn did_url(&self) -> String {
+    pub fn publish(&mut self, node_url: &str) -> Result<String> {
         match self {
             Document::IotaDocument {
                 document,
-                network: _,
-            } => document.id().to_string(),
-        }
+                document_payload,
+                ..
+            } => {
+                let payload = match document_payload {
+                    Some(p) => p,
+                    None => return Err(anyhow::Error::msg("No payload")),
+                };
+                *document = publish_did(payload.clone(), node_url)?;
+                return Ok(document.id().to_string());
+            }
+        };
     }
 
-    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+    pub fn did(&self) -> String {
         match self {
-            Document::IotaDocument {
-                document,
-                network: _,
-            } => Ok(document.to_jcs()?),
+            Document::IotaDocument { document, .. } => document.id().to_string(),
         }
     }
 
     pub fn public_key(&self) -> Result<Point> {
         match self {
             Document::IotaDocument { document, .. } => {
+                let method = match document
+                    .core_document()
+                    .resolve_method("#key-1", Some(MethodScope::VerificationMethod))
+                {
+                    Some(m) => m,
+                    None => return Err(anyhow::Error::msg("Can't find verification method")),
+                };
+
                 let mut p = Point::default();
-                p.unmarshal_binary(
-                    &document.extract_signing_keys()[0]
-                        .expect("there is no public key")
-                        .data()
-                        .try_decode()?,
-                )?;
+                p.unmarshal_binary(&method.data().try_decode()?)?;
                 Ok(p)
             }
         }

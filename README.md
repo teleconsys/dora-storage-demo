@@ -5,7 +5,7 @@ dOra is a distributed oracle built with the cryptographic techniques of DKG and 
 
 This demo is proposed as a proof of concept of the oracular and storage functionality.
 
-Every node and the committee itself uses the DID standard for identification and communication purposes. This demo is currently using the IOTA Chrysalis network as a transport layer and to deploy DID Documents. **A conversion for this demo to Stardust is currently in the works, and will be released soon**.
+Every node and the committee itself uses the DID standard for identification and communication purposes. This demo is currently using the **Stardust Testnet** network as a transport layer and to deploy DID Documents. If you want to run this demo using the IOTA Mainnet (Chrysalis) look at the [branch Chrysalis](https://github.com/teleconsys/dora-storage-demo/tree/chrysalis).
 
 To implement DKG, DSS and other cryptographic features we use our library [kyber-rs](https://github.com/teleconsys/kyber-rs) which is Rust partial porting of the [DEDIS kyber](https://github.com/dedis/kyber) library written in Go.
 
@@ -21,7 +21,7 @@ Running the demo
 
 In this demo, you can instance some nodes through the provided [docker-compose file](docker-compose.yml). Every fresh node will create its keypair and DID document on the Tangle, and connect to its local storage (a dedicated [minio](https://min.io/) instance). 
 
-To create a committee and send requests, a dedicated CLI app is provided by the very same executable. The nodes will create a committee in response to the `governor` entity, which, in this demo, is represented by a special `index` for indexed payloads on the Tangle. Requests will be forwarded to the `committee` using its DID's index, and the committee's logs and outputs will also be published on the same index. 
+To create a committee and send requests, a dedicated CLI app is provided by the very same executable. The nodes will create a committee in response to the `governor` entity, which, in this demo, is represented by a special `tag` for tagged data on the Tangle. Requests will be forwarded to the `committee` using a tag derived from its DID, and the committee's logs and outputs will also be published on the same tag. 
 
 The nodes will communicate using the Tangle, without the necessity of exchanging IPs or anything. This means that you can run multiple nodes from different machines and networks and they will form a `committee` using only the reciprocal DIDs, with some initial input from the `governor`. 
 
@@ -31,6 +31,8 @@ For a detailed set of instructions regarding how to properly run and customize t
 ---------------------------------
 
 This demo is not intended to be fully representative of the final dOra system, either functionally or formally. Several possible security holes are present, deliberately overlooked as not of fundamental importance for a proof of concept.
+
+This demo is built for the **Stardust Testnet**. The committee's funding (received through the faucet) is necessary to publish L1 DID documents and could be lost at the end of the demo. A way to retrieve funds from a committee's address is not yet implemented. **We disclaim any responsibility for loss of funds as we publish this demo to be used ONLY with Stardust Testnet without funds retrival.** 
 
 
 Contacts
