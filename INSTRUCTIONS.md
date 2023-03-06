@@ -60,7 +60,7 @@ did:iota:rms:did_tag3
 You can ask the nodes to create a committee by running the following command:
 
 ```bash
-dora-storage new-committee --governor governor-tag --nodes did_tag1,did_tag2,did_tag3 
+dora-storage new-committee --governor-tag some_governor_tag --nodes did_tag1,did_tag2,did_tag3 
 ```
 
 For example, for a governor's tag equal to `dora-governor-demo` and nodes DIDs equal to: 
@@ -71,7 +71,7 @@ did:iota:rms:0xcda7287931253a7a805911f85da061ba6c8c4bc47bcd95caa1644ca467c56540
 ```
 the command will look like: 
 ```bash
-dora-storage new-committee --governor dora-governor-demo --nodes 0x99c7b8faf3732bff32db3364449b0529935ddcb1ccd3689f7008f4d7a039b622,0x88a060a7a5c3e657f0ca01624aed9e27d4026856f588e61c3d0294ae0ac02fed,0xcda7287931253a7a805911f85da061ba6c8c4bc47bcd95caa1644ca467c56540 
+dora-storage new-committee --governor-tag dora-governor-demo --nodes 0x99c7b8faf3732bff32db3364449b0529935ddcb1ccd3689f7008f4d7a039b622,0x88a060a7a5c3e657f0ca01624aed9e27d4026856f588e61c3d0294ae0ac02fed,0xcda7287931253a7a805911f85da061ba6c8c4bc47bcd95caa1644ca467c56540 
 ```
 
 In this command, you can omit the `node-url` argument (which is defaulted to `https://api.testnet.shimmer.network`) and the governor argument which is defaulted to `dora-governor-demo` (the governor specified in the provided [docker-compose](docker-compose.yml)). If you specified a different `governor` tag for your nodes, you MUST specify the chosen tag here, otherwise, the nodes won't see the `governor` message.
