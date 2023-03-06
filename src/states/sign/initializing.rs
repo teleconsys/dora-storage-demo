@@ -72,8 +72,13 @@ impl Initializing {
             sleep_time: signature_params.sleep_time,
         })
     }
+
+    pub fn get_session_id(&self) -> String {
+        self.session_id.clone()
+    }
 }
 
+#[derive(Clone)]
 pub struct InitializingBuilder {
     suite: SuiteEd25519,
     session_id: Option<String>,
@@ -84,6 +89,7 @@ pub struct InitializingBuilder {
     message: Option<Vec<u8>>,
     sender: Option<Sender<MessageWrapper<SignMessage>>>,
     sleep_time: Option<u64>,
+    session_id_nonce: Option<String>,
 }
 
 #[derive(Debug, Error)]
@@ -122,12 +128,17 @@ impl InitializingBuilder {
         let partial_signature = dss.partial_sig()?;
         let own_index = dss.index;
         let partecipants = dss.participants.clone();
+        let mut session_id = self.session_id.ok_or(MissingField::SessionId)?;
+        if let Some(nonce) = self.session_id_nonce {
+            session_id = format!("{session_id}#{nonce}")
+        }
+
         Ok(Initializing {
             dss,
             partial_signature,
-            processed_partial_owners: vec![partecipants[own_index].clone()],
+            processed_partial_owners: vec![partecipants[own_index]],
             bad_signers: vec![],
-            session_id: self.session_id.ok_or(MissingField::SessionId)?,
+            session_id,
             waiting: WaitingState::Waiting,
             sender: self.sender.ok_or(MissingField::Sender)?,
             sleep_time: self.sleep_time.ok_or(MissingField::SleepTime)?,
@@ -148,9 +159,16 @@ impl InitializingBuilder {
         }
     }
 
-    pub fn with_message(self, message: Vec<u8>) -> Self {
+    pub fn with_message(self, message: &[u8]) -> Self {
         Self {
-            message: Some(message),
+            message: Some(message.to_owned()),
+            ..self
+        }
+    }
+
+    pub fn with_session_id_nonce(self, nonce: String) -> Self {
+        Self {
+            session_id_nonce: Some(nonce),
             ..self
         }
     }
@@ -187,6 +205,7 @@ impl TryFrom<DistKeyGenerator<SuiteEd25519>> for InitializingBuilder {
             message: None,
             sender: None,
             sleep_time: None,
+            session_id_nonce: None,
         })
     }
 }
@@ -228,7 +247,7 @@ impl State<SignTypes> for Initializing {
             SignMessage::PartialSignature(ps) => match self.dss.process_partial_sig(ps.clone()) {
                 Ok(()) => {
                     self.processed_partial_owners
-                        .push(self.dss.participants[ps.partial.i].clone());
+                        .push(self.dss.participants[ps.partial.i]);
                     DeliveryStatus::Delivered
                 }
                 Err(
@@ -236,10 +255,9 @@ impl State<SignTypes> for Initializing {
                     | DSSError::InvalidSessionId
                     | DSSError::InvalidPartialSignature,
                 ) => {
-                    self.bad_signers
-                        .push(self.dss.participants[ps.partial.i].clone());
+                    self.bad_signers.push(self.dss.participants[ps.partial.i]);
                     self.processed_partial_owners
-                        .push(self.dss.participants[ps.partial.i].clone());
+                        .push(self.dss.participants[ps.partial.i]);
                     DeliveryStatus::Delivered
                 }
                 Err(e) => DeliveryStatus::Error(e.into()),

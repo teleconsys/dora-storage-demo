@@ -1,22 +1,16 @@
 use std::fs;
 
-use identity_iota::{
-    core::ToJson,
-    crypto::ProofValue,
-    iota_core::Network,
-    prelude::{IotaDocument, KeyPair},
-};
 use kyber_rs::{
-    encoding::{BinaryMarshaler, BinaryUnmarshaler},
+    encoding::BinaryUnmarshaler,
     group::edwards25519::{Point as EdPoint, Scalar as EdScalar, SuiteEd25519},
     share::dkg::rabin::DistKeyGenerator,
-    util::key::new_key_pair,
     Point, Scalar,
 };
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
-use crate::did::{new_document, Document};
+use crate::did::Document;
 
 pub mod node;
 pub mod run;
@@ -70,10 +64,7 @@ enum SaveDataError {
 impl SaveData {
     fn load_or_create() -> Self {
         match Self::load() {
-            Ok(save_data) => {
-                log::debug!("loaded save data");
-                save_data
-            }
+            Ok(save_data) => save_data,
             Err(e) => {
                 log::debug!("could not load save data: {:?}", e);
                 let save_data = Self::default();
@@ -106,7 +97,7 @@ where
 {
     let bin = scalar
         .marshal_binary()
-        .map_err(|e| serde::ser::Error::custom(format!("could not serialize: {}", e)))?;
+        .map_err(|e| serde::ser::Error::custom(format!("could not serialize: {e}")))?;
     ser.serialize_bytes(&bin)
 }
 
@@ -118,7 +109,7 @@ where
     let mut scalar = EdScalar::default();
     scalar
         .unmarshal_binary(&bytes)
-        .map_err(|e| serde::de::Error::custom(format!("could not deserialize: {}", e)))?;
+        .map_err(|e| serde::de::Error::custom(format!("could not deserialize: {e}")))?;
     Ok(scalar)
 }
 
@@ -128,7 +119,7 @@ where
 {
     let bin = scalar
         .marshal_binary()
-        .map_err(|e| serde::ser::Error::custom(format!("could not serialize: {}", e)))?;
+        .map_err(|e| serde::ser::Error::custom(format!("could not serialize: {e}")))?;
     ser.serialize_bytes(&bin)
 }
 
@@ -140,6 +131,6 @@ where
     let mut scalar = EdPoint::default();
     scalar
         .unmarshal_binary(&bytes)
-        .map_err(|e| serde::de::Error::custom(format!("could not deserialize: {}", e)))?;
+        .map_err(|e| serde::de::Error::custom(format!("could not deserialize: {e}")))?;
     Ok(scalar)
 }

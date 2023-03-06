@@ -27,12 +27,9 @@ use logging::NodeSignatureLog;
 
 use states::dkg;
 
-use crate::{
-    api::requests::{
-        messages::{Execution, InputUri, OutputUri, StorageLocalUri, StorageUri},
-        GenericRequest,
-    },
-    net::network::Network,
+use crate::api::requests::{
+    messages::{Execution, InputUri, OutputUri, StorageLocalUri, StorageUri},
+    GenericRequest,
 };
 
 #[derive(Parser)]
@@ -55,6 +52,12 @@ enum Action {
 struct VerifyLogArgs {
     #[arg(required = true, long = "log", help = "response from a dora committee")]
     log: NodeSignatureLog,
+
+    #[arg(
+        long = "node-url",
+        default_value = "https://api.testnet.shimmer.network"
+    )]
+    node_url: String,
 }
 
 #[derive(Parser)]
@@ -62,21 +65,26 @@ struct SendArgs {
     #[arg(required = true, long = "message", help = "message to send")]
     message: String,
 
-    #[arg(
-        long = "index",
-        help = "index of the message",
-        default_value = "dora_input_message"
-    )]
-    index: String,
+    #[arg(required = true, long = "tag", help = "tag of the message")]
+    tag: String,
 
-    #[arg(long = "network", default_value = "iota-main")]
-    network: String,
+    #[arg(
+        long = "node-url",
+        default_value = "https://api.testnet.shimmer.network"
+    )]
+    node_url: String,
 }
 
 #[derive(Parser)]
 struct VerifyArgs {
     #[arg(required = true, long = "committee-log", help = "dora committee log")]
     committee_log: CommitteeLog,
+
+    #[arg(
+        long = "node-url",
+        default_value = "https://api.testnet.shimmer.network"
+    )]
+    node_url: String,
 }
 
 #[derive(Parser)]
@@ -87,27 +95,33 @@ struct RequestArgs {
     #[arg(long, help = "storage id", default_value = None)]
     storage_id: Option<String>,
 
-    #[arg(long = "committee-index", long, help = "index")]
-    committee_index: String,
+    #[arg(long = "committee-tag", long, help = "tag")]
+    committee_tag: String,
 
-    #[arg(long = "network", default_value = "iota-main")]
-    network: String,
+    #[arg(
+        long = "node-url",
+        default_value = "https://api.testnet.shimmer.network"
+    )]
+    node_url: String,
 }
 
 #[derive(Parser)]
 struct NewCommitteeArgs {
     #[arg(
-        long = "governor-index",
+        long = "governor-tag",
         default_value = "dora-governor-demo",
-        help = "index"
+        help = "tag"
     )]
-    governor_index: String,
+    governor_tag: String,
 
-    #[arg(long, help = "node DIDs")]
-    nodes: Option<String>,
+    #[arg(required = true, long, help = "node DIDs")]
+    nodes: String,
 
-    #[arg(long = "network", default_value = "iota-main")]
-    network: String,
+    #[arg(
+        long = "node-url",
+        default_value = "https://api.testnet.shimmer.network"
+    )]
+    node_url: String,
 }
 
 fn main() -> Result<()> {
@@ -131,7 +145,7 @@ fn verify(args: VerifyArgs) -> Result<()> {
     let committee_did_url = response.committee_did.clone();
 
     println!("Retrieving committee's public key from DID document");
-    let public_key = resolve_document(committee_did_url, None)?.public_key()?;
+    let public_key = resolve_document(committee_did_url, &args.node_url)?.public_key()?;
     println!("Public key retrieved");
     println!("Performing signature validation");
 
@@ -156,7 +170,7 @@ fn verify_log(args: VerifyLogArgs) -> Result<()> {
     let did_url = log.sender_did.clone();
 
     println!("Retrieving node's public key from DID document");
-    let public_key = resolve_document(did_url, None)?.public_key()?;
+    let public_key = resolve_document(did_url, &args.node_url)?.public_key()?;
     println!("Public key retrieved");
     println!("Performing signature validation");
 
@@ -173,8 +187,6 @@ fn verify_log(args: VerifyLogArgs) -> Result<()> {
 }
 
 fn send_request(args: RequestArgs) -> Result<()> {
-    let net =
-        Network::from_str(&args.network).map_err(|_| anyhow::Error::msg("invalid network"))?;
     let mut storage_id = StorageUri::None;
     if let Some(id) = args.storage_id {
         storage_id = StorageUri::Storage(StorageLocalUri(id));
@@ -188,70 +200,54 @@ fn send_request(args: RequestArgs) -> Result<()> {
     };
     let request = serde_json::to_vec(&request)?;
 
-    let publisher = Publisher::new(
-        net.try_into()
-            .map_err(|_| anyhow::Error::msg("invalid network"))?,
-        None,
-    )?;
+    let publisher = Publisher::new(&args.node_url)?;
     let rt = tokio::runtime::Runtime::new()?;
-    let result = rt.block_on(publisher.publish(&request, Some(args.committee_index)))?;
+    let result = rt.block_on(publisher.publish(&request, Some(args.committee_tag)))?;
     println!("{result}");
     Ok(())
 }
 
 fn new_committee(args: NewCommitteeArgs) -> Result<()> {
-    let net =
-        Network::from_str(&args.network).map_err(|_| anyhow::Error::msg("invalid network"))?;
-    let mut nodes = match args.nodes {
-        Some(n) => n,
-        None => return Err(anyhow::Error::msg("Missing node dids")),
-    };
+    let mut nodes = args.nodes;
 
-    if let Network::IotaNetwork(n) = net.clone() {
-        match n {
-            identity_iota::iota_core::Network::Mainnet => {
-                nodes = nodes
-                    .split(',')
-                    .map(|d| format!("\"did:iota:{d}\""))
-                    .collect::<Vec<String>>()
-                    .join(",");
-            }
-            identity_iota::iota_core::Network::Devnet => {
-                nodes = nodes
-                    .split(',')
-                    .map(|d| format!("\"did:iota:dev:{d}\""))
-                    .collect::<Vec<String>>()
-                    .join(",");
-            }
-            _ => panic!("invalid network"),
+    let publisher = Publisher::new(&args.node_url)?;
+
+    let rt = tokio::runtime::Runtime::new()?;
+    let network_name = rt.block_on(publisher.0.get_network_name())?;
+
+    match network_name.as_str() {
+        // or mainnet?
+        "shimmer" => {
+            nodes = nodes
+                .split(',')
+                .map(|d| format!("\"did:iota:smr:{d}\""))
+                .collect::<Vec<String>>()
+                .join(",");
         }
+        "testnet" => {
+            nodes = nodes
+                .split(',')
+                .map(|d| format!("\"did:iota:rms:{d}\""))
+                .collect::<Vec<String>>()
+                .join(",");
+        }
+        _ => panic!("invalid network"),
     }
 
     let request = format!("{{\"nodes\": [{nodes}]}}").as_bytes().to_owned();
 
-    let publisher = Publisher::new(
-        net.try_into()
-            .map_err(|_| anyhow::Error::msg("invalid network"))?,
-        None,
-    )?;
-    let rt = tokio::runtime::Runtime::new()?;
-    let result = rt.block_on(publisher.publish(&request, Some(args.governor_index)))?;
+    let result = rt.block_on(publisher.publish(&request, Some(args.governor_tag)))?;
     println!("{result}");
     Ok(())
 }
 
 fn send_message(args: SendArgs) -> Result<()> {
-    let net =
-        Network::from_str(&args.network).map_err(|_| anyhow::Error::msg("invalid network"))?;
     let message = args.message.as_bytes().to_owned();
 
-    let publisher = Publisher::new(
-        net.try_into()
-            .map_err(|_| anyhow::Error::msg("invalid network"))?,
-        None,
-    )?;
+    let publisher = Publisher::new(&args.node_url)?;
+
     let rt = tokio::runtime::Runtime::new()?;
-    let result = rt.block_on(publisher.publish(&message, Some(args.index)))?;
+    let result = rt.block_on(publisher.publish(&message, Some(args.tag)))?;
     println!("{result}");
     Ok(())
 }
