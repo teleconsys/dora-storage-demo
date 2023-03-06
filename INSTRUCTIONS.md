@@ -102,7 +102,7 @@ The following table offers a brief description of all the arguments that you can
 | committee-tag |    Yes   |                                           the tag where the committee is listening for requests (it is the last part of the committee's DID)                                           |
 |    input-uri   |    Yes   | the input location in a uri format, supported values are:  `iota:message:{block_id}`, `literal:string:{data_string}` `storage:local:{storage_id}` and you can also provide any kind of http url |
 |   storage-id   |    No    |                                   if this argument is present, data from the input will be stored in the storage using the given {storage_id} as key.                                   |
-|     network    |    No    |                                                    the network to use for the request (iota-main or iota-dev, defaulted to iota-main)                                                   |
+|       node-url       |    No   | the Stardust Testnet node to use |
 
 As soon as the request is received the committee will start working on it. 
 Log example: 
