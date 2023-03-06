@@ -5,7 +5,7 @@ dOra is a distributed oracle built with the cryptographic techniques of DKG and 
 
 This demo is proposed as a proof of concept of the oracular and storage functionality.
 
-Every node and the committee itself uses the DID standard for identification and communication purposes. This demo is currently using the IOTA Chrysalis network as a transport layer and to deploy DID Documents. **A conversion for this demo to Stardust is currently in the works, and will be released soon**.
+Every node and the committee itself uses the DID standard for identification and communication purposes. This demo is currently using the IOTA Chrysalis network as a transport layer and to deploy DID Documents. A conversion for this demo to Stardust Testnet is available at the [master branch](https://github.com/teleconsys/dora-storage-demo/tree/master), you can also look at our [latest release](https://github.com/teleconsys/dora-storage-demo/releases/tag/latest).
 
 To implement DKG, DSS and other cryptographic features we use our library [kyber-rs](https://github.com/teleconsys/kyber-rs) which is Rust partial porting of the [DEDIS kyber](https://github.com/dedis/kyber) library written in Go.
 
