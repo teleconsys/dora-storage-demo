@@ -12,7 +12,7 @@ use super::NodeMessage;
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct StorageLocalUri(pub String);
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
-pub struct IotaIndexUri(String);
+pub struct IotaIdUri(String);
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 
 pub struct IotaMessageUri(pub String);
@@ -38,12 +38,10 @@ impl Serialize for InputUri {
     {
         match self {
             InputUri::Iota(ref iota) => match iota {
-                IotaMessageUri(index) => serializer.serialize_str(&format!("iota:message:{index}")),
+                IotaMessageUri(id) => serializer.serialize_str(&format!("iota:message:{id}")),
             },
             InputUri::Local(ref local) => match local {
-                StorageLocalUri(index) => {
-                    serializer.serialize_str(&format!("storage:local:{index}"))
-                }
+                StorageLocalUri(id) => serializer.serialize_str(&format!("storage:local:{id}")),
             },
             InputUri::Literal(s) => serializer.serialize_str(&format!("literal:string:{s}")),
             InputUri::Url(u) => serializer.serialize_str(u.as_str()),
@@ -58,12 +56,10 @@ impl Serialize for OutputUri {
     {
         match self {
             OutputUri::Iota(ref iota) => match iota {
-                IotaIndexUri(index) => serializer.serialize_str(&format!("iota:index:{index}")),
+                IotaIdUri(id) => serializer.serialize_str(&format!("iota:id:{id}")),
             },
             OutputUri::Storage(ref local) => match local {
-                StorageLocalUri(index) => {
-                    serializer.serialize_str(&format!("storage:local:{index}"))
-                }
+                StorageLocalUri(id) => serializer.serialize_str(&format!("storage:local:{id}")),
             },
             OutputUri::None => serializer.serialize_str("none"),
         }
@@ -77,9 +73,7 @@ impl Serialize for StorageUri {
     {
         match self {
             StorageUri::Storage(ref local) => match local {
-                StorageLocalUri(index) => {
-                    serializer.serialize_str(&format!("storage:local:{index}"))
-                }
+                StorageLocalUri(id) => serializer.serialize_str(&format!("storage:local:{id}")),
             },
             StorageUri::None => serializer.serialize_str("none"),
         }
@@ -140,7 +134,7 @@ fn deserialize_output_uri<'de, D: Deserializer<'de>>(
                 return Ok(OutputUri::None);
             }
 
-            if let Ok(uri) = IotaIndexUri::from_str(v) {
+            if let Ok(uri) = IotaIdUri::from_str(v) {
                 return Ok(OutputUri::Iota(uri));
             }
 
@@ -195,15 +189,15 @@ impl FromStr for StorageLocalUri {
             return Err(UriDeserializeError::InvalidUri);
         }
 
-        if let ("storage", "local", index) = (parts[0], parts[1], parts[2]) {
-            return Ok(StorageLocalUri(index.to_owned()));
+        if let ("storage", "local", id) = (parts[0], parts[1], parts[2]) {
+            return Ok(StorageLocalUri(id.to_owned()));
         }
 
         Err(UriDeserializeError::InvalidUri)
     }
 }
 
-impl FromStr for IotaIndexUri {
+impl FromStr for IotaIdUri {
     type Err = UriDeserializeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -212,8 +206,8 @@ impl FromStr for IotaIndexUri {
             return Err(UriDeserializeError::InvalidUri);
         }
 
-        if let ("iota", "index", index) = (parts[0], parts[1], parts[2]) {
-            return Ok(IotaIndexUri(index.to_owned()));
+        if let ("iota", "id", id) = (parts[0], parts[1], parts[2]) {
+            return Ok(IotaIdUri(id.to_owned()));
         }
 
         Err(UriDeserializeError::InvalidUri)
@@ -229,8 +223,8 @@ impl FromStr for IotaMessageUri {
             return Err(UriDeserializeError::InvalidUri);
         }
 
-        if let ("iota", "message", index) = (parts[0], parts[1], parts[2]) {
-            return Ok(IotaMessageUri(index.to_owned()));
+        if let ("iota", "message", id) = (parts[0], parts[1], parts[2]) {
+            return Ok(IotaMessageUri(id.to_owned()));
         }
 
         Err(UriDeserializeError::InvalidUri)
@@ -267,7 +261,7 @@ impl FromStr for InputUri {
 #[derive(Deserialize, Clone, Debug)]
 pub enum OutputUri {
     None,
-    Iota(IotaIndexUri),
+    Iota(IotaIdUri),
     Storage(StorageLocalUri),
 }
 

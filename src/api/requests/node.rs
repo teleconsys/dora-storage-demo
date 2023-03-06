@@ -3,7 +3,6 @@ use std::{
     str::{FromStr, Utf8Error},
 };
 
-use enum_display::EnumDisplay;
 use identity_iota::core::ToJson;
 use iota_client::{
     block::{payload::Payload, BlockId},
@@ -214,9 +213,9 @@ impl ApiNode {
                 }
             },
             InputUri::Local(uri) => match uri {
-                StorageLocalUri(index) => self
+                StorageLocalUri(id) => self
                     .storage
-                    .get(index.to_owned())
+                    .get(id.to_owned())
                     .map_err(ApiNodeError::StorageError)?,
             },
             InputUri::Literal(s) => s.as_bytes().to_vec(),
@@ -238,8 +237,8 @@ impl ApiNode {
     ) -> Result<Fsm<'a, R, S>, ApiNodeError> {
         let sign_initial_state = sign::InitializingBuilder::try_from(self.api_params.dkg.clone())
             .map_err(ApiNodeError::SignatureError)?
-            .with_message(message.into())
-            .with_secret(self.api_params.secret.clone())
+            .with_message(message)
+            .with_secret(self.api_params.secret)
             .with_sender(self.api_params.signature_sender.clone())
             .with_sleep_time(self.api_params.signature_sleep_time)
             .with_id(session_id.clone())
@@ -289,7 +288,6 @@ pub enum ApiNodeError {
     #[error("http connection error")]
     HttpError(#[source] anyhow::Error),
 }
-
 
 fn manage_signature_terminal_state(
     final_state: SignTerminalStates,

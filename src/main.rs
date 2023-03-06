@@ -66,7 +66,7 @@ struct SendArgs {
     message: String,
 
     #[arg(required = true, long = "tag", help = "tag of the message")]
-    index: String,
+    tag: String,
 
     #[arg(
         long = "node-url",
@@ -95,8 +95,8 @@ struct RequestArgs {
     #[arg(long, help = "storage id", default_value = None)]
     storage_id: Option<String>,
 
-    #[arg(long = "committee-index", long, help = "index")]
-    committee_index: String,
+    #[arg(long = "committee-tag", long, help = "tag")]
+    committee_tag: String,
 
     #[arg(
         long = "node-url",
@@ -108,11 +108,11 @@ struct RequestArgs {
 #[derive(Parser)]
 struct NewCommitteeArgs {
     #[arg(
-        long = "governor-index",
+        long = "governor-tag",
         default_value = "dora-governor-demo",
-        help = "index"
+        help = "tag"
     )]
-    governor_index: String,
+    governor_tag: String,
 
     #[arg(required = true, long, help = "node DIDs")]
     nodes: String,
@@ -202,7 +202,7 @@ fn send_request(args: RequestArgs) -> Result<()> {
 
     let publisher = Publisher::new(&args.node_url)?;
     let rt = tokio::runtime::Runtime::new()?;
-    let result = rt.block_on(publisher.publish(&request, Some(args.committee_index)))?;
+    let result = rt.block_on(publisher.publish(&request, Some(args.committee_tag)))?;
     println!("{result}");
     Ok(())
 }
@@ -236,7 +236,7 @@ fn new_committee(args: NewCommitteeArgs) -> Result<()> {
 
     let request = format!("{{\"nodes\": [{nodes}]}}").as_bytes().to_owned();
 
-    let result = rt.block_on(publisher.publish(&request, Some(args.governor_index)))?;
+    let result = rt.block_on(publisher.publish(&request, Some(args.governor_tag)))?;
     println!("{result}");
     Ok(())
 }
@@ -247,7 +247,7 @@ fn send_message(args: SendArgs) -> Result<()> {
     let publisher = Publisher::new(&args.node_url)?;
 
     let rt = tokio::runtime::Runtime::new()?;
-    let result = rt.block_on(publisher.publish(&message, Some(args.index)))?;
+    let result = rt.block_on(publisher.publish(&message, Some(args.tag)))?;
     println!("{result}");
     Ok(())
 }

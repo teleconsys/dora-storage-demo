@@ -114,7 +114,7 @@ impl<T: DeserializeOwned + Display, S: Sender<T> + 'static> IotaListenRelay<T, S
 
             // TODO MANAGE THE ID
             let h = thread::spawn(move || {
-                for (data, id) in receiver {
+                for (data, _id) in receiver {
                     if let Ok(message) = serde_json::from_slice(&data) {
                         log::trace!("message received");
                         let res = output.send(message);
@@ -201,7 +201,7 @@ impl<T: Serialize, R: Receiver<T>> IotaBroadcastRelay<T, R> {
             let message = self
                 .input
                 .recv()
-                .map_err(|e| Error::msg(format!("{:?}", e)))?;
+                .map_err(|e| Error::msg(format!("{e:?}")))?;
             // log::trace!(
             // "Relaying message: {:?}",
             // serde_json::to_string(&message).unwrap()

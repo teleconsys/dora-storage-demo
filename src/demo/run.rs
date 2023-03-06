@@ -63,6 +63,12 @@ pub struct NodeArgs {
     )]
     node_url: String,
 
+    #[arg(
+        long = "faucet-url",
+        default_value = "https://faucet.testnet.shimmer.network/api/enqueue"
+    )]
+    faucet_url: String,
+
     #[arg(short, long = "time-resolution", default_value = "20")]
     time_resolution: usize,
 
@@ -101,16 +107,12 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
     log::trace!("node's address {} balance is: {}", address_str, balance);
     if balance < 10000000 {
         log::trace!("waiting for funds on node's address {}", address_str);
-        rt.block_on(request_faucet_funds(
-            &client,
-            address,
-            "https://faucet.testnet.shimmer.network/api/enqueue",
-        ))?
+        rt.block_on(request_faucet_funds(&client, address, &args.faucet_url))?
     }
 
     let did_url = get_did(&keypair, &args.node_url, &mut save_data)?;
 
-    log::info!("Node DID: {}", did_url);
+    log::info!("node's DID is: {}", did_url);
 
     let is_completed = Arc::new(AtomicBool::new(false));
 
@@ -125,13 +127,13 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
     let mut peers_dids = all_dids.clone();
     peers_dids.retain(|x| *x != did_url);
 
-    // peers dids to indexes
+    // peers dids to tags
     let mut peers_tags = Vec::new();
     for peer in peers_dids.clone() {
         peers_tags.push(peer.split(':').last().unwrap()[2..].to_string());
     }
 
-    // own did to indexes
+    // own did to tags
     let own_tag = did_url.split(':').last().unwrap()[2..].to_string();
 
     let (dkg_input_channel_sender, dkg_input_channel) = mpsc::channel();
@@ -186,6 +188,7 @@ pub fn run_node(args: NodeArgs) -> Result<()> {
 
     let network_params = NodeNetworkParams {
         node_url: args.node_url,
+        faucet_url: args.faucet_url,
     };
 
     peers_dids.sort();
@@ -219,7 +222,7 @@ fn get_keypair(
 ) -> Result<Pair<kyber_rs::group::edwards25519::Point>, anyhow::Error> {
     let keypair = match save_data.node_state {
         Some(ref node_state) => {
-            log::info!("Loaded keypair");
+            log::info!("loaded keypair");
             Pair {
                 private: node_state.private_key,
                 public: node_state.public_key,
@@ -227,7 +230,7 @@ fn get_keypair(
         }
         None => {
             let pair = new_key_pair(&suite)?;
-            log::info!("Created new keypair");
+            log::info!("created new keypair");
             save_data.node_state = Some(NodeState {
                 private_key: pair.private,
                 public_key: pair.public,
@@ -253,7 +256,7 @@ fn get_did(
             did_document: Some(document),
             ..
         }) => {
-            log::info!("Using existing node DID");
+            log::info!("using existing node's DID");
             document.did()
         }
         _ => {
@@ -264,7 +267,7 @@ fn get_did(
 
             document.publish(node_url)?;
             let did = document.did();
-            log::info!("node's DID document has been published: {}", did);
+            log::info!("node's DID document has been published");
 
             if let Some(ref mut node_state) = save_data.node_state {
                 node_state.did_document = Some(document);
@@ -284,16 +287,16 @@ struct DkgInit {
 }
 
 fn listen_governor_instructions(
-    governor_index: String,
+    governor_tag: String,
     own_did: String,
     node_url: String,
 ) -> Result<Vec<String>> {
     let mut init_listener = Listener::new(&node_url)?;
     log::info!(
-        "listening for instructions on governor index: {}",
-        governor_index
+        "listening for instructions on governor tag: {}",
+        governor_tag
     );
-    let receiver = tokio::runtime::Runtime::new()?.block_on(init_listener.start(governor_index))?;
+    let receiver = tokio::runtime::Runtime::new()?.block_on(init_listener.start(governor_tag))?;
     loop {
         if let Some(data) = receiver.iter().next() {
             let mut deserializer = serde_json::Deserializer::from_slice(&data.0);

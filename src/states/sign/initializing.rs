@@ -168,7 +168,7 @@ impl InitializingBuilder {
 
     pub fn with_session_id_nonce(self, nonce: String) -> Self {
         Self {
-            session_id_nonce: Some(nonce.to_owned()),
+            session_id_nonce: Some(nonce),
             ..self
         }
     }
@@ -247,7 +247,7 @@ impl State<SignTypes> for Initializing {
             SignMessage::PartialSignature(ps) => match self.dss.process_partial_sig(ps.clone()) {
                 Ok(()) => {
                     self.processed_partial_owners
-                        .push(self.dss.participants[ps.partial.i].clone());
+                        .push(self.dss.participants[ps.partial.i]);
                     DeliveryStatus::Delivered
                 }
                 Err(
@@ -255,10 +255,9 @@ impl State<SignTypes> for Initializing {
                     | DSSError::InvalidSessionId
                     | DSSError::InvalidPartialSignature,
                 ) => {
-                    self.bad_signers
-                        .push(self.dss.participants[ps.partial.i].clone());
+                    self.bad_signers.push(self.dss.participants[ps.partial.i]);
                     self.processed_partial_owners
-                        .push(self.dss.participants[ps.partial.i].clone());
+                        .push(self.dss.participants[ps.partial.i]);
                     DeliveryStatus::Delivered
                 }
                 Err(e) => DeliveryStatus::Error(e.into()),

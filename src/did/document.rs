@@ -4,7 +4,7 @@ use iota_client::{
     block::{address::Address, payload::Payload},
     Client,
 };
-use kyber_rs::{encoding::BinaryUnmarshaler, group::edwards25519::Point, util::key::Pair};
+use kyber_rs::{encoding::BinaryUnmarshaler, group::edwards25519::Point};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};

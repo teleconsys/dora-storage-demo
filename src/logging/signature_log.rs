@@ -35,10 +35,10 @@ impl NodeSignatureLogger {
         let publisher = Publisher::new(&self.node_url)?;
         self.sign_log(log)?;
 
-        let msg_id = tokio::runtime::Runtime::new()?
+        let block_id = tokio::runtime::Runtime::new()?
             .block_on(publisher.publish(&log.to_jcs()?, Some(self.committee_tag.clone())))?;
         log::info!(target: &signature_log_target(&log.session_id),
-            "node's signature log published (msg_id: {})", msg_id);
+            "node's signature log published (block_id: {})", block_id);
         Ok(())
     }
 

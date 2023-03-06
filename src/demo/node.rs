@@ -3,14 +3,14 @@ use std::sync::mpsc::{Receiver, Sender};
 use crate::api::requests::{ApiNode, ApiParams, GenericRequest, HandlerParams};
 use crate::demo::run::{get_address, get_address_balance, request_faucet_funds};
 use crate::demo::CommitteeState;
-use crate::did::{new_document, resolve_document, Document};
+use crate::did::{new_document, resolve_document};
 use crate::dkg::{DkgMessage, DkgTerminalStates};
 use crate::dlt::iota::{FsmSigner, Listener, Publisher};
-use crate::logging::{new_node_signature_logger, new_signature_log, NodeSignatureLogger};
+use crate::logging::{new_node_signature_logger, NodeSignatureLogger};
 use crate::states::dkg::InitializingIota;
 use crate::states::feed::{Feed, MessageWrapper};
 use crate::states::fsm::StateMachine;
-use crate::states::sign::{self, SignMessage, SignTerminalStates};
+use crate::states::sign::{self, SignMessage};
 use crate::store::Storage;
 
 use identity_iota::iota::NetworkName;
@@ -47,6 +47,7 @@ pub struct Node {
 
 pub struct NodeNetworkParams {
     pub node_url: String,
+    pub faucet_url: String,
 }
 
 pub struct NodeProtocolParams {
@@ -84,7 +85,6 @@ impl Node {
 
     pub fn run(mut self, storage: Option<Storage>) -> Result<(), anyhow::Error> {
         let secret = self.keypair.private;
-        let public = self.keypair.public;
 
         let (dkg, did_urls, dist_pub_key) = match self.save_data.committee_state {
             Some(ref committee_state) => (
@@ -94,7 +94,7 @@ impl Node {
             ),
             None => {
                 let (dkg, did_urls, dist_key) = self
-                    .run_dkg(&public)
+                    .run_dkg()
                     .map_err(|e| anyhow::Error::msg("failed to run dkg").context(e))?;
                 self.save_data.committee_state = Some(CommitteeState {
                     dkg: dkg.clone(),
@@ -103,7 +103,7 @@ impl Node {
                     committee_did: None,
                 });
                 if let Err(e) = self.save_data.save() {
-                    log::error!("Failed to save committee data: {}", e);
+                    log::error!("failed to save committee data: {}", e);
                 };
                 (dkg, did_urls, dist_key)
             }
@@ -118,7 +118,7 @@ impl Node {
         {
             Some(did) => anyhow::Ok(did.to_owned()),
             None => Ok({
-                log::debug!("Creating and publishing DID");
+                log::debug!("creating and publishing committee's DID document ...");
                 let did = self
                     .create_did(
                         dist_pub_key,
@@ -126,16 +126,15 @@ impl Node {
                         &self.network_params.node_url,
                         &dkg,
                         secret,
-                        public,
                     )
                     .map_err(|e| {
-                        anyhow::Error::msg("could not create and publish DID").context(e)
+                        anyhow::Error::msg("could not create and publish DID document").context(e)
                     })?;
                 if let Some(ref mut committee_state) = self.save_data.committee_state {
                     committee_state.committee_did = Some(did.clone())
                 }
                 if let Err(e) = self.save_data.save() {
-                    log::warn!("Failed to save committee data: {}", e);
+                    log::warn!("failed to save committee data: {}", e);
                 }
                 did
             }),
@@ -160,7 +159,6 @@ impl Node {
         node_url: &str,
         dkg: &DistKeyGenerator<SuiteEd25519>,
         secret: kyber_rs::group::edwards25519::Scalar,
-        public: Point,
     ) -> Result<String, anyhow::Error> {
         let mut all_dids = self.protocol_params.did_urls.clone();
         all_dids.push(self.protocol_params.own_did_url.clone());
@@ -184,7 +182,7 @@ impl Node {
                 rt.block_on(request_faucet_funds(
                     &client,
                     address,
-                    "https://faucet.testnet.shimmer.network/api/enqueue",
+                    &self.network_params.faucet_url,
                 ))?
             } else {
                 loop {
@@ -207,7 +205,7 @@ impl Node {
         )
         .map_err(|e| anyhow::Error::msg("failed to create new DID document").context(e))?;
         log::info!("committee's DID document created");
-        log::info!("signing committee's DID document...");
+        log::info!("signing committee's DID document ...");
 
         let sign_initial_state = sign::InitializingBuilder::try_from(dkg.clone())?
             .with_secret(secret)
@@ -221,24 +219,21 @@ impl Node {
             self.channels.sign_output_channel.clone(),
         );
 
-        log::debug!("signing committe's DID");
         document.sign(signer, &dist_pub_key, node_url)?;
-        log::debug!("committe's DID signed");
+        log::info!("committe's DID document has been signed");
 
         let mut did = "".to_owned();
 
         // Publish signed DID if the node is the first on the list
         if self.protocol_params.own_did_url == all_dids[0] {
-            log::info!("publishing committee's DID...");
-            did = document
-                .publish(node_url)
-                .map_err(|e| anyhow::Error::msg("failed to publish committee DID").context(e))?;
-            log::info!("committee's DID has been published");
+            log::info!("publishing committee's DID document ...");
+            did = document.publish(node_url).map_err(|e| {
+                anyhow::Error::msg("failed to publish committee's DID document").context(e)
+            })?;
+            log::info!("committee's DID document has been published");
             log::info!("committee's DID is: {}", did);
-
-            //let resolved_did = resolve_document(did_url.clone())?;
         } else {
-            log::info!("waiting for committee's DID...");
+            log::info!("waiting for committee's DID ...");
             let c = Client::builder().with_node(node_url)?.finish()?;
             let rt = tokio::runtime::Runtime::new()?;
             let mut found = false;
@@ -249,7 +244,6 @@ impl Node {
                     get_address(&dist_pub_key.marshal_binary()?),
                 ))?;
                 for id in alias_ids {
-                    //let (_, alias) = rt.block_on(c.alias_output_id(id))?;
                     let name_string = match rt.block_on(c.get_network_name())?.as_ref() {
                         "shimmer" => todo!(),
                         "testnet" => "rms",
@@ -275,19 +269,16 @@ impl Node {
                     break;
                 }
             }
-            log::info!("committee's DID has been published");
+            log::info!("committee's DID document has been published");
             log::info!("committee's DID is: {}", did);
-
-            //let resolved_did = resolve_document(did_url.clone())?;
         }
         Ok(did)
     }
 
     fn run_dkg(
         &mut self,
-        public: &Point,
     ) -> Result<(DistKeyGenerator<SuiteEd25519>, Vec<String>, Point), anyhow::Error> {
-        log::info!("starting DKG...");
+        log::info!("starting DKG ...");
         let dkg_initial_state = InitializingIota::new(
             self.keypair.clone(),
             self.protocol_params.own_did_url.clone(),
@@ -317,7 +308,7 @@ impl Node {
         did_urls: Vec<String>,
     ) -> Result<(), anyhow::Error> {
         let binding = did_url.clone();
-        let api_index = &binding.split(':').last().unwrap()[2..];
+        let api_tag = &binding.split(':').last().unwrap()[2..];
         let mut api_input = Listener::new(&self.network_params.node_url)?;
         let api_output = Publisher::new(&self.network_params.node_url)?;
         let api_params = ApiParams {
@@ -336,8 +327,8 @@ impl Node {
             api_params,
         };
         let rt = tokio::runtime::Runtime::new()?;
-        log::info!("listening for committee requests on index: {}", api_index);
-        for (message_data, req_id) in rt.block_on(api_input.start(api_index.to_owned()))? {
+        log::info!("listening for committee requests on tag: {}", api_tag);
+        for (message_data, req_id) in rt.block_on(api_input.start(api_tag.to_owned()))? {
             let message: GenericRequest = match serde_json::from_slice(&message_data) {
                 Ok(m) => m,
                 Err(_) => {
@@ -352,7 +343,10 @@ impl Node {
                 }
             };
             let session_id: String = hex::encode(req_id).chars().take(10).collect();
-            log::info!("received a request for the committee (msg_id: {})", req_id);
+            log::info!(
+                "received a request for the committee (block_id: {})",
+                req_id
+            );
             log::info!("handling request [{}]", session_id);
             let handler_params = HandlerParams {
                 signature_logger: logger.clone(),
@@ -368,7 +362,7 @@ impl Node {
                     &req_id.to_string(),
                     handler_params,
                 )
-                .map_err(|e| anyhow::Error::from(e))
+                .map_err(anyhow::Error::from)
             {
                 Ok(r) => r,
                 Err(e) => {
@@ -387,9 +381,9 @@ impl Node {
                         "publishing committee's task log for request [{}]...",
                         session_id
                     );
-                    match rt.block_on(api_output.publish(&encoded, Some(api_index.to_owned()))) {
+                    match rt.block_on(api_output.publish(&encoded, Some(api_tag.to_owned()))) {
                         Ok(i) => log::info!(
-                            "committee's task log for request [{}] published (msg_id: {})",
+                            "committee's task log for request [{}] published (block_id: {})",
                             session_id,
                             i
                         ),

@@ -64,10 +64,7 @@ enum SaveDataError {
 impl SaveData {
     fn load_or_create() -> Self {
         match Self::load() {
-            Ok(save_data) => {
-                log::debug!("loaded save data");
-                save_data
-            }
+            Ok(save_data) => save_data,
             Err(e) => {
                 log::debug!("could not load save data: {:?}", e);
                 let save_data = Self::default();
@@ -100,7 +97,7 @@ where
 {
     let bin = scalar
         .marshal_binary()
-        .map_err(|e| serde::ser::Error::custom(format!("could not serialize: {}", e)))?;
+        .map_err(|e| serde::ser::Error::custom(format!("could not serialize: {e}")))?;
     ser.serialize_bytes(&bin)
 }
 
@@ -112,7 +109,7 @@ where
     let mut scalar = EdScalar::default();
     scalar
         .unmarshal_binary(&bytes)
-        .map_err(|e| serde::de::Error::custom(format!("could not deserialize: {}", e)))?;
+        .map_err(|e| serde::de::Error::custom(format!("could not deserialize: {e}")))?;
     Ok(scalar)
 }
 
@@ -122,7 +119,7 @@ where
 {
     let bin = scalar
         .marshal_binary()
-        .map_err(|e| serde::ser::Error::custom(format!("could not serialize: {}", e)))?;
+        .map_err(|e| serde::ser::Error::custom(format!("could not serialize: {e}")))?;
     ser.serialize_bytes(&bin)
 }
 
@@ -134,6 +131,6 @@ where
     let mut scalar = EdPoint::default();
     scalar
         .unmarshal_binary(&bytes)
-        .map_err(|e| serde::de::Error::custom(format!("could not deserialize: {}", e)))?;
+        .map_err(|e| serde::de::Error::custom(format!("could not deserialize: {e}")))?;
     Ok(scalar)
 }
