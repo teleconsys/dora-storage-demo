@@ -213,26 +213,12 @@ fn new_committee(args: NewCommitteeArgs) -> Result<()> {
     let publisher = Publisher::new(&args.node_url)?;
 
     let rt = tokio::runtime::Runtime::new()?;
-    let network_name = rt.block_on(publisher.0.get_network_name())?;
 
-    match network_name.as_str() {
-        // or mainnet?
-        "shimmer" => {
-            nodes = nodes
-                .split(',')
-                .map(|d| format!("\"did:iota:smr:{d}\""))
-                .collect::<Vec<String>>()
-                .join(",");
-        }
-        "testnet" => {
-            nodes = nodes
-                .split(',')
-                .map(|d| format!("\"did:iota:rms:{d}\""))
-                .collect::<Vec<String>>()
-                .join(",");
-        }
-        _ => panic!("invalid network"),
-    }
+    nodes = nodes
+        .split(',')
+        .map(|d| format!("\"did:iota:rms:{d}\""))
+        .collect::<Vec<String>>()
+        .join(",");
 
     let request = format!("{{\"nodes\": [{nodes}]}}").as_bytes().to_owned();
 

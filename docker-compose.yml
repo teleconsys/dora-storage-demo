@@ -43,7 +43,7 @@ services:
   dora-storage-1:
     container_name: d1
     tty: true
-    image: giordyfish/dora-storage-demo:1.1.0
+    image: giordyfish/dora-storage-demo:1.2.0
     stop_grace_period: 5m
     restart: always
     volumes:
@@ -69,7 +69,7 @@ services:
   dora-storage-2:
     container_name: d2
     tty: true
-    image: giordyfish/dora-storage-demo:1.1.0
+    image: giordyfish/dora-storage-demo:1.2.0
     stop_grace_period: 5m
     restart: always
     volumes:
@@ -95,7 +95,7 @@ services:
   dora-storage-3:
     container_name: d3
     tty: true
-    image: giordyfish/dora-storage-demo:1.1.0
+    image: giordyfish/dora-storage-demo:1.2.0
     stop_grace_period: 5m
     restart: always
     volumes:

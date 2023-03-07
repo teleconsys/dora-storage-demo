@@ -244,14 +244,9 @@ impl Node {
                     get_address(&dist_pub_key.marshal_binary()?),
                 ))?;
                 for id in alias_ids {
-                    let name_string = match rt.block_on(c.get_network_name())?.as_ref() {
-                        "shimmer" => todo!(),
-                        "testnet" => "rms",
-                        _ => return Err(anyhow::Error::msg("got unsupported network from client")),
-                    };
                     let did_candidate = IotaDID::from_alias_id(
                         &id.to_string(),
-                        &NetworkName::try_from(name_string)?,
+                        &NetworkName::try_from("rms")?,
                     );
                     let published_doc = resolve_document(did_candidate.to_string(), node_url);
                     match published_doc {
