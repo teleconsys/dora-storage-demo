@@ -177,12 +177,12 @@ These logs include the DID that contains the public key which the signature must
 SAVING NODE AND COMMITTEE STATE
 ----------------
 
-During the run, each node will save to its docker volume some information. Those information are used to run the demo starting from a previously reached state. 
+During the run, each node will save some information to its docker volume. Those data are used to run the demo starting from a previously reached state. 
 
-Data are saved a the following step:
+Data are saved at the following step:
 1. Node's keypair creation -> Keypair is saved
 2. Node's DID document creation and publication -> Node's DID is saved
 3. Distributed Key Generation -> Distributed parameters and peers are saved
 4. Committee's DID creation and publication -> Committee's DID is saved
 
-To reset the to run from the start, you have to manually remove the docker volumes linked to the dOra nodes.
+To reset the demo from the start, you have to manually remove the docker volumes linked to the dOra nodes.
